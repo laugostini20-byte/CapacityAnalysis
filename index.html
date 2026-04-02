@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Capacity Review</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav class="topnav">
+  <div class="topnav-brand">
+    <div class="topnav-logo">LC</div>
+    <div>
+      <div class="topnav-title">Capacity Review</div>
+      <div class="topnav-sub">Lab Capacity Review</div>
+    </div>
+  </div>
+  <div class="topnav-tag">Internal Tool</div>
+</nav>
+
+<main class="page">
+
+  <!-- ── Top Controls ── -->
+  <div class="top-grid">
+
+    <!-- Week + Upload -->
+    <div class="card">
+      <div class="card-body">
+        <div class="card-title">Week in view</div>
+        <div class="week-nav">
+          <button class="week-nav-btn" onclick="shiftWeek(-1)" title="Previous week">&#8592;</button>
+          <div class="week-center">
+            <div class="week-label" id="week-label">—</div>
+            <div class="week-sub" id="week-sub">—</div>
+          </div>
+          <button class="week-nav-btn" onclick="shiftWeek(1)" title="Next week">&#8594;</button>
+        </div>
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('f-sched').click()">
+          <input type="file" id="f-sched" accept=".csv,.xlsx,.xls" onchange="loadSchedule(event)">
+          <div class="drop-icon">📅</div>
+          <div class="drop-text"><strong>Upload onsite schedule</strong><br>CSV or Excel · Columns: Lab, Start Time, End Time, Number of Tech</div>
+        </div>
+        <div id="st-sched"></div>
+        <div class="drop-zone drop-zone-std" onclick="document.getElementById('f-std').click()">
+          <input type="file" id="f-std" accept=".csv,.xlsx,.xls" onchange="loadStdHours(event)">
+          <div class="drop-icon">📈</div>
+          <div class="drop-text"><strong>Upload standard hours</strong><br>CSV or Excel · Columns: Lab, Current Std Hours</div>
+        </div>
+        <div id="st-std"></div>
+      </div>
+    </div>
+
+    <!-- Assumptions -->
+    <div class="card">
+      <div class="card-body">
+        <div class="card-title">Capacity assumptions</div>
+        <div class="params-grid">
+          <div class="param">
+            <label>Productive hrs/day</label>
+            <input type="number" id="p-hrs" value="5.6" step="0.1" min="1" max="12">
+          </div>
+          <div class="param">
+            <label>Days/week</label>
+            <input type="number" id="p-days" value="5" step="1" min="1" max="7">
+          </div>
+          <div class="param">
+            <label>Weeks/month</label>
+            <input type="number" id="p-weeks" value="4.33" step="0.01" min="1" max="5">
+          </div>
+          <div class="param">
+            <label>At-risk threshold %</label>
+            <input type="number" id="p-thresh" value="85" step="5" min="50" max="100">
+          </div>
+        </div>
+        <button class="recalc-btn" onclick="recalc()">↻ Recalculate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Summary Metrics ── -->
+  <div class="summary-grid">
+    <div class="metric blue-accent">
+      <div class="metric-label">Labs tracked</div>
+      <div class="metric-value blue" id="m-total">19</div>
+      <div class="metric-sub">with std hours data</div>
+    </div>
+    <div class="metric blue-accent">
+      <div class="metric-label">Techs on onsite</div>
+      <div class="metric-value blue" id="m-onsite">—</div>
+      <div class="metric-sub">FTE equivalent this week</div>
+    </div>
+    <div class="metric red">
+      <div class="metric-label">Over capacity</div>
+      <div class="metric-value red" id="m-over">—</div>
+      <div class="metric-sub">demand exceeds supply</div>
+    </div>
+    <div class="metric amber">
+      <div class="metric-label">At risk</div>
+      <div class="metric-value amber" id="m-risk">—</div>
+      <div class="metric-sub">above threshold</div>
+    </div>
+    <div class="metric green">
+      <div class="metric-label">Healthy</div>
+      <div class="metric-value green" id="m-ok">—</div>
+      <div class="metric-sub">within capacity</div>
+    </div>
+  </div>
+
+  <!-- ── Table Controls ── -->
+  <div class="table-controls">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" type="text" placeholder="Search lab..." id="q" oninput="renderTable()">
+    </div>
+    <select class="filter-select" id="f-status" onchange="renderTable()">
+      <option value="all">All statuses</option>
+      <option value="over">Over capacity</option>
+      <option value="risk">At risk</option>
+      <option value="ok">Healthy</option>
+    </select>
+    <select class="filter-select" id="f-sort" onchange="onSortSelect()">
+      <option value="status">Sort: Status</option>
+      <option value="headcount">Sort: Headcount</option>
+      <option value="util">Sort: Utilization</option>
+      <option value="name">Sort: Lab Name</option>
+    </select>
+    <div class="view-toggle" role="group" aria-label="Capacity views">
+      <button type="button" class="view-btn" data-view="weekly" onclick="setView('weekly')">Weekly</button>
+      <button type="button" class="view-btn" data-view="monthly" onclick="setView('monthly')">Monthly</button>
+      <button type="button" class="view-btn" data-view="quarterly" onclick="setView('quarterly')">Quarterly</button>
+      <button type="button" class="view-btn" data-view="yearly" onclick="setView('yearly')">Yearly</button>
+    </div>
+    <div class="row-count" id="row-count">— labs</div>
+  </div>
+
+  <!-- ── Table ── -->
+  <div class="table-wrap">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:22%" data-sort="name" data-help="Lab location or business unit name." onclick="setSort('name')">Lab <span class="sort-arrow" id="arr-name"></span></th>
+            <th style="width:8%" class="num" data-sort="headcount" data-help="Starting technician headcount for the selected month before onsite deductions." onclick="setSort('headcount')">Base techs <span class="sort-arrow" id="arr-headcount"></span></th>
+            <th style="width:9%" class="num" data-sort="onsite" data-help="FTEs assigned to onsite work this week (derived from uploaded schedule)." onclick="setSort('onsite')">On onsite <span class="sort-arrow" id="arr-onsite"></span></th>
+            <th style="width:9%" class="num" data-help="Technicians available for lab work after onsite assignments (Base techs minus On onsite).">Avail</th>
+            <th style="width:9%" class="num" id="hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
+            <th style="width:10%" class="num" id="hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
+            <th style="width:10%" class="num" id="hdr-gap" data-sort="gap" data-help="Weekly cap minus Std hrs; negative means shortfall." onclick="setSort('gap')">Weekly gap <span class="sort-arrow" id="arr-gap"></span></th>
+            <th style="width:13%" data-sort="util" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity." onclick="setSort('util')">Utilization <span class="sort-arrow" id="arr-util"></span></th>
+            <th style="width:10%" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Lab Capacity Review · Internal Use Only</div>
+    <div id="footer-updated">No schedule loaded</div>
+  </div>
+
+</main>
+
+<script src="./headcount_data.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
