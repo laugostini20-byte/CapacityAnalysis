@@ -58,6 +58,11 @@ let colHelpTipEl = null;
 let currentView = 'weekly';
 let currentThresh = 0.85;
 let stdHoursOverrides = {};
+const DEFAULT_STD_HOURS_BY_MONTH = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined'
+  ? HARDCODED_STD_HOURS_BY_MONTH
+  : {};
+let stdHoursByMonth = JSON.parse(JSON.stringify(DEFAULT_STD_HOURS_BY_MONTH));
+const stdHoursSourceName = 'Historical standard hours (Mar 2025-Mar 2026)';
 let schedulePersistenceEnabled = false;
 const DEFAULT_HEADCOUNT_BY_MONTH = typeof HARDCODED_MONTHLY_HEADCOUNT !== 'undefined'
   ? HARDCODED_MONTHLY_HEADCOUNT
@@ -231,11 +236,17 @@ function getFiscalYearMonthKeys(date) {
   return Array.from({length: 12}, (_, i) => getMonthKey(addMonths(start, i)));
 }
 
-function getStdHoursForLab(lab) {
+function getStdHoursForLabMonth(lab, monthKey) {
+  const monthMap = stdHoursByMonth[monthKey];
+  if (monthMap && Number.isFinite(monthMap[lab.lab])) return monthMap[lab.lab];
+  return lab.stdHrs;
+}
+
+function getStdHoursForLab(lab, monthKey = getMonthKey(currentWeekStart)) {
   if (Object.prototype.hasOwnProperty.call(stdHoursOverrides, lab.lab)) {
     return stdHoursOverrides[lab.lab];
   }
-  return lab.stdHrs;
+  return getStdHoursForLabMonth(lab, monthKey);
 }
 
 async function parseRowsFromFile(file) {
@@ -604,20 +615,27 @@ function recalc() {
   const monthKey = getMonthKey(currentWeekStart);
   const quarterKeys = getFiscalQuarterMonthKeys(currentWeekStart);
   const yearKeys = getFiscalYearMonthKeys(currentWeekStart);
+  const hasStdHistoryData = Object.keys(stdHoursByMonth).length > 0;
   const hasHeadcountData = Object.keys(headcountByMonth).length > 0;
 
-  const activeLabs = BASE_LABS.filter(l => getStdHoursForLab(l) != null);
+  const activeLabs = BASE_LABS.filter(l => getStdHoursForLab(l, monthKey) != null);
 
   labRows = activeLabs.map(l => {
-    const stdHours = getStdHoursForLab(l);
+    const stdHours = getStdHoursForLab(l, monthKey);
     const baseTech = getHeadcountForLabMonth(l, monthKey);
     const lost    = techDaysLost[l.lab] || 0;
     const lostFTE = lost / daysPerWeek;
     const avail   = Math.max(0, baseTech - lostFTE);
     const wDemand = stdHours;
     const mDemand = wDemand * weeksPerMo;
-    const qDemand = mDemand * 3;
-    const yDemand = mDemand * 12;
+    const qDemand = quarterKeys.reduce((s, k) => {
+      const wkStd = getStdHoursForLab(l, k);
+      return s + (wkStd != null ? wkStd * weeksPerMo : 0);
+    }, 0);
+    const yDemand = yearKeys.reduce((s, k) => {
+      const wkStd = getStdHoursForLab(l, k);
+      return s + (wkStd != null ? wkStd * weeksPerMo : 0);
+    }, 0);
 
     const wCap    = avail * hrsPerDay * daysPerWeek;
     const monthCapPerFte = hrsPerDay * daysPerWeek * weeksPerMo;
@@ -673,7 +691,10 @@ function recalc() {
   const hcText = hasHeadcountData
     ? `Headcount basis: ${monthKey}${headcountSourceName ? ` · ${headcountSourceName}` : ''}`
     : 'Headcount basis: static baseline';
-  document.getElementById('week-sub').textContent = `${onsiteText} · ${hcText}`;
+  const stdText = hasStdHistoryData
+    ? `Std hrs basis: ${monthKey}${stdHoursSourceName ? ` · ${stdHoursSourceName}` : ''}`
+    : 'Std hrs basis: static baseline';
+  document.getElementById('week-sub').textContent = `${onsiteText} · ${hcText} · ${stdText}`;
 
   updateViewDecor();
   updateStatusSummary();
