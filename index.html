@@ -150,8 +150,8 @@
             <th style="width:9%" class="num" id="hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
             <th style="width:10%" class="num" id="hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
             <th style="width:10%" class="num" id="hdr-gap" data-sort="gap" data-help="Weekly cap minus Std hrs; negative means shortfall." onclick="setSort('gap')">Weekly gap <span class="sort-arrow" id="arr-gap"></span></th>
-            <th style="width:13%" data-sort="util" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity." onclick="setSort('util')">Utilization <span class="sort-arrow" id="arr-util"></span></th>
-            <th style="width:10%" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
+            <th style="width:13%" class="num" data-sort="util" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity." onclick="setSort('util')">Utilization <span class="sort-arrow" id="arr-util"></span></th>
+            <th style="width:10%" class="num" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
           </tr>
         </thead>
         <tbody id="tbl-body"></tbody>

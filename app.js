@@ -103,9 +103,9 @@ const VIEW_META = {
     capKey: 'qCap',
     gapKey: 'qGap',
     utilKey: 'qUtil',
-    demandHeader: 'Quarter demand',
-    capHeader: 'Quarter cap',
-    gapHeader: 'Quarter gap',
+    demandHeader: 'Qtr demand',
+    capHeader: 'Qtr cap',
+    gapHeader: 'Qtr gap',
     demandHelp: 'Demand for the fiscal quarter (3 months). Fiscal calendar runs Apr-Mar.',
     capHelp: 'Capacity for the fiscal quarter (3 months). Fiscal calendar runs Apr-Mar.',
     gapHelp: 'Quarter cap minus quarter demand; negative means shortfall.'
@@ -774,12 +774,12 @@ function renderTable() {
       <td class="num">${fmtHrs(demand)}</td>
       <td class="num">${fmtHrs(cap)}</td>
       <td class="num ${gapCls}">${gapStr}</td>
-      <td>${utilPct!=null?`
+      <td class="util-cell">${utilPct!=null?`
         <div class="util-wrap">
           <div class="util-pct ${utilColor}">${utilPct}%</div>
           <div class="bar-track"><div class="bar-fill ${barCls}" style="width:${barPct}%"></div></div>
         </div>`:'—'}</td>
-      <td>${badge}</td>
+      <td class="status-cell">${badge}</td>
     </tr>`;
   }).join('');
 }
