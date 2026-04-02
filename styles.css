@@ -515,6 +515,29 @@
     font-size: 12px;
     color: var(--muted);
   }
+  .modal-preview {
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #f8fbff;
+    padding: 9px 10px;
+  }
+  .modal-preview-line {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.35;
+  }
+  .modal-preview-line + .modal-preview-line { margin-top: 3px; }
+  .modal-preview-ok { color: var(--green); font-weight: 600; }
+  .modal-preview-warn { color: var(--amber); font-weight: 600; }
+  .modal-preview-list {
+    margin: 6px 0 0 18px;
+    padding: 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .modal-preview-list .more { font-style: italic; }
   .modal-actions {
     margin-top: 14px;
     display: flex;
@@ -539,6 +562,10 @@
     color: var(--white);
   }
   .modal-btn-primary:hover { background: var(--navy); border-color: var(--navy); }
+  .modal-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
 
   /* ── Responsive ── */
   @media (max-width: 900px) {

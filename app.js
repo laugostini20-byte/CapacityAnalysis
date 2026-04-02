@@ -72,6 +72,21 @@ const DEFAULT_HEADCOUNT_BY_MONTH = typeof HARDCODED_MONTHLY_HEADCOUNT !== 'undef
   : {};
 let headcountByMonth = JSON.parse(JSON.stringify(DEFAULT_HEADCOUNT_BY_MONTH));
 const headcountSourceName = 'Historical baseline (Apr 2025-Mar 2026)';
+const STD_HOURS_LAB_HEADERS = [
+  'Lab',
+  'Lab / Department',
+  'Lab Name',
+  'Department',
+  'Location'
+];
+const STD_HOURS_VALUE_HEADERS = [
+  'Current Std Hours',
+  'Std Hours',
+  'Standard Hours',
+  'StdHrs',
+  'Weekly Demand',
+  'Demand Hrs'
+];
 
 const VIEW_META = {
   weekly: {
@@ -375,6 +390,41 @@ async function parseRowsFromFile(file) {
   return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
 }
 
+async function buildStdUploadPreview(file) {
+  const rows = await parseRowsFromFile(file);
+  let usableRows = 0;
+  let matchedRows = 0;
+  let unmatchedRows = 0;
+  const matchedLabs = new Set();
+  const unmatchedLabs = new Set();
+
+  for (const row of rows) {
+    const labRaw = getRowValueByHeaders(row, STD_HOURS_LAB_HEADERS);
+    const stdRaw = getRowValueByHeaders(row, STD_HOURS_VALUE_HEADERS);
+    const stdHours = parseHoursValue(stdRaw);
+    if (!labRaw || stdHours == null) continue;
+    usableRows++;
+
+    const labName = resolveLabName(labRaw);
+    if (labName) {
+      matchedRows++;
+      matchedLabs.add(labName);
+    } else {
+      unmatchedRows++;
+      unmatchedLabs.add(String(labRaw).trim());
+    }
+  }
+
+  return {
+    parsedRows: rows.length,
+    usableRows,
+    matchedRows,
+    unmatchedRows,
+    matchedLabs: [...matchedLabs].sort((a, b) => a.localeCompare(b)),
+    unmatchedLabs: [...unmatchedLabs].sort((a, b) => a.localeCompare(b))
+  };
+}
+
 function rowsFromApiEvents(events) {
   return (events || []).map(e => ({
     Lab: e.lab,
@@ -522,14 +572,50 @@ function closeStdUploadModal(result = null) {
   if (stdUploadModalResolver) stdUploadModalResolver(result);
   stdUploadModalResolver = null;
   setStdUploadModalOpen(false);
+  renderStdUploadPreview(null);
 }
 
-function openStdUploadDateModal(fileName) {
+function renderStdUploadPreview(preview) {
+  const summaryEl = document.getElementById('std-preview-summary');
+  const matchedEl = document.getElementById('std-preview-matched');
+  const unmatchedEl = document.getElementById('std-preview-unmatched');
+  const listEl = document.getElementById('std-preview-unmatched-list');
+  const applyBtn = document.getElementById('std-upload-apply');
+  if (!summaryEl || !matchedEl || !unmatchedEl || !listEl || !applyBtn) return;
+
+  if (!preview) {
+    summaryEl.textContent = '';
+    matchedEl.textContent = '';
+    unmatchedEl.textContent = '';
+    listEl.innerHTML = '';
+    applyBtn.disabled = false;
+    return;
+  }
+
+  summaryEl.textContent = `${preview.usableRows} usable rows found in this file (${preview.parsedRows} total rows).`;
+  matchedEl.textContent = `${preview.matchedRows} rows matched (${preview.matchedLabs.length} labs in this tool).`;
+  if (preview.unmatchedRows) {
+    unmatchedEl.textContent = `${preview.unmatchedRows} rows did not match current tool labs.`;
+    const items = preview.unmatchedLabs.slice(0, 8).map(name => `<li>${name}</li>`).join('');
+    const more = preview.unmatchedLabs.length > 8
+      ? `<li class="more">+${preview.unmatchedLabs.length - 8} more</li>`
+      : '';
+    listEl.innerHTML = items + more;
+  } else {
+    unmatchedEl.textContent = 'All usable rows matched current tool labs.';
+    listEl.innerHTML = '';
+  }
+
+  applyBtn.disabled = preview.usableRows === 0;
+}
+
+function openStdUploadDateModal(fileName, preview) {
   return new Promise(resolve => {
     const fromInput = document.getElementById('std-effective-from');
     const toInput = document.getElementById('std-effective-to');
     const fileEl = document.getElementById('std-upload-file-name');
     if (fileEl) fileEl.textContent = fileName || 'Selected file';
+    renderStdUploadPreview(preview);
     if (fromInput) fromInput.value = fmtDateInputValue(currentWeekStart);
     if (toInput) toInput.value = '';
 
@@ -780,9 +866,15 @@ async function loadSchedule(e) {
 async function loadStdHours(e) {
   const file = e.target.files[0]; if (!file) return;
   const stEl = document.getElementById('st-std');
-  stEl.innerHTML = '<div class="file-status" style="color:#888">Waiting for date range...</div>';
+  stEl.innerHTML = '<div class="file-status" style="color:#888">Analyzing file...</div>';
   try {
-    const dateSelection = await openStdUploadDateModal(file.name);
+    const preview = await buildStdUploadPreview(file);
+    if (!preview.usableRows) {
+      stEl.innerHTML = '<div class="file-status err">⚠ No usable rows found. Expected columns like Lab + Current Std Hours.</div>';
+      return;
+    }
+
+    const dateSelection = await openStdUploadDateModal(file.name, preview);
     if (!dateSelection) {
       stEl.innerHTML = '<div class="file-status" style="color:#888">Upload canceled</div>';
       return;
@@ -800,7 +892,7 @@ async function loadStdHours(e) {
         ? `${dateSelection.effectiveFrom} to ${dateSelection.effectiveTo}`
         : `${dateSelection.effectiveFrom} onward`;
       stEl.innerHTML =
-        `<div class="file-status ok">✓ ${file.name} &nbsp;·&nbsp; ${inserted} new · ${updated} updated · ${unchanged} unchanged &nbsp;·&nbsp; ${dateText}</div>`;
+        `<div class="file-status ok">✓ ${file.name} &nbsp;·&nbsp; ${inserted} new · ${updated} updated · ${unchanged} unchanged &nbsp;·&nbsp; ${preview.matchedLabs.length} matched labs${preview.unmatchedLabs.length ? ` · ${preview.unmatchedLabs.length} unmatched labels` : ''} &nbsp;·&nbsp; ${dateText}</div>`;
       document.getElementById('footer-updated').textContent =
         `Std hours synced to database: ${file.name} · ${new Date().toLocaleTimeString()}`;
       recalc();
@@ -815,21 +907,8 @@ async function loadStdHours(e) {
     let unmatchedRows = 0;
 
     for (const row of rows) {
-      const labRaw = getRowValueByHeaders(row, [
-        'Lab',
-        'Lab / Department',
-        'Lab Name',
-        'Department',
-        'Location'
-      ]);
-      const stdRaw = getRowValueByHeaders(row, [
-        'Current Std Hours',
-        'Std Hours',
-        'Standard Hours',
-        'StdHrs',
-        'Weekly Demand',
-        'Demand Hrs'
-      ]);
+      const labRaw = getRowValueByHeaders(row, STD_HOURS_LAB_HEADERS);
+      const stdRaw = getRowValueByHeaders(row, STD_HOURS_VALUE_HEADERS);
       const stdHours = parseHoursValue(stdRaw);
       if (!labRaw || stdHours == null) continue;
       validRows++;

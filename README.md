@@ -49,6 +49,7 @@ The response includes `inserted`, `updated`, and `unchanged` counts.
 For standard-hours uploads:
 
 - Upload a CSV/XLSX/XLS file with columns like `Lab` and `Current Std Hours`.
+- Before saving, the popup previews how many rows match current tool labs and lists unmatched labels.
 - The app prompts for `Effective from` and optional `Effective to` dates.
 - Hours apply only within that date range.
 - If multiple uploads overlap for a lab/date, the newest upload wins.
