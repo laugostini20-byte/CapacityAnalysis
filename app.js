@@ -87,6 +87,38 @@ const STD_HOURS_VALUE_HEADERS = [
   'Weekly Demand',
   'Demand Hrs'
 ];
+const STD_HOURS_CODE_TO_LAB = {
+  '01': 'Rochester Cal Lab',
+  '02': 'Portland Cal Lab',
+  '05': 'Houston Cal Lab',
+  '06': 'Philadelphia Cal Lab',
+  '09': 'Toronto Cal Lab',
+  '11': 'Boston Cal Lab',
+  '12': 'Puerto Rico Cal Lab',
+  '13': 'Pittsburgh Cal Lab',
+  '15': 'Dayton Cal Lab',
+  '17': 'Charlotte Cal Lab',
+  '19': 'Los Angeles Cal Lab',
+  '23': 'Denver Cal Lab',
+  '24': 'Phoenix Cal Lab',
+  '25': 'Tangent Indianapolis Lab',
+  '26': 'Tangent Decatur Cal Lab',
+  '31': 'San Diego Cal Lab',
+  '33': 'Ottawa Cal Lab',
+  '34': 'Montreal Cal Lab',
+  '42': 'Pipettes Milford Lab',
+  '49': 'Biomedical',
+  '56': 'Chesapeake Cal Lab',
+  '61': 'Palm Beach Cal Lab',
+  '68': 'Cleveland Cal Lab',
+  'M5': 'St. Louis Cal Lab',
+  'C08': 'Honda Lincoln, AL (AAP)',
+  'C09': 'Honda Greensburg IN (IAP)',
+  'C10': 'Honda Marysville OH (MAP)',
+  'C11': 'Honda E Liberty, OH (ELP)',
+  'C12': 'Honda Anna, OH (AEP)',
+  'C13': 'Honda Dayton, OH'
+};
 
 const VIEW_META = {
   weekly: {
@@ -258,6 +290,23 @@ function resolveLabName(raw) {
     if (found) return found.lab;
   }
   return null;
+}
+
+function resolveStdHoursLabName(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+
+  const trailingCode = s.match(/-\s*([A-Za-z0-9]+)\s*$/);
+  if (trailingCode) {
+    const code = String(trailingCode[1]).toUpperCase();
+    if (STD_HOURS_CODE_TO_LAB[code]) return STD_HOURS_CODE_TO_LAB[code];
+    // If a code is present but not mapped, skip instead of fuzzy guessing.
+    return null;
+  }
+
+  // Backward compatibility for non-coded formats.
+  return resolveLabName(s);
 }
 
 function normalizeHeader(v) {
@@ -439,7 +488,7 @@ async function buildStdUploadPreview(file) {
     if (!labRaw || stdHours == null) continue;
     usableRows++;
 
-    const labName = resolveLabName(labRaw);
+    const labName = resolveStdHoursLabName(labRaw);
     const srcLabel = String(labRaw).trim();
     if (labName) {
       matchedRows++;
@@ -533,7 +582,7 @@ function rowsFromStdApi(overrides) {
   return (overrides || []).map(row => ({
     id: row.id,
     labRaw: row.lab,
-    labKey: normalizeLabForMatch(resolveLabName(row.lab) || row.labKey || row.lab),
+    labKey: normalizeLabForMatch(resolveStdHoursLabName(row.lab) || ''),
     stdHours: Number(row.stdHours),
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo || null,
@@ -952,7 +1001,7 @@ async function loadStdHours(e) {
       if (!labRaw || stdHours == null) continue;
       validRows++;
 
-      const labName = resolveLabName(labRaw);
+      const labName = resolveStdHoursLabName(labRaw);
       if (!labName) {
         unmatchedRows++;
         continue;
