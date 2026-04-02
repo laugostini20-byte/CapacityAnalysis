@@ -63,6 +63,9 @@ const DEFAULT_STD_HOURS_BY_MONTH = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'unde
   : {};
 let stdHoursByMonth = JSON.parse(JSON.stringify(DEFAULT_STD_HOURS_BY_MONTH));
 const stdHoursSourceName = 'Historical standard hours (Mar 2025-Mar 2026)';
+let stdHoursRangeOverrides = [];
+let stdHoursPersistenceEnabled = false;
+let stdUploadModalResolver = null;
 let schedulePersistenceEnabled = false;
 const DEFAULT_HEADCOUNT_BY_MONTH = typeof HARDCODED_MONTHLY_HEADCOUNT !== 'undefined'
   ? HARDCODED_MONTHLY_HEADCOUNT
@@ -207,6 +210,31 @@ function getMonthKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
+function getMonthStartFromKey(monthKey) {
+  const [y, m] = String(monthKey || '').split('-').map(v => parseInt(v, 10));
+  if (!Number.isInteger(y) || !Number.isInteger(m)) return null;
+  return new Date(y, m - 1, 1);
+}
+
+function fmtDateInputValue(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function parseISODate(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return null;
+  const [y, m, d] = iso.split('-').map(v => parseInt(v, 10));
+  const parsed = new Date(y, m - 1, d);
+  return Number.isNaN(parsed.valueOf()) ? null : parsed;
+}
+
+function labKeysMatch(a, b) {
+  if (!a || !b) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
 function addMonths(d, n) {
   const r = new Date(d);
   r.setDate(1);
@@ -236,7 +264,40 @@ function getFiscalYearMonthKeys(date) {
   return Array.from({length: 12}, (_, i) => getMonthKey(addMonths(start, i)));
 }
 
+function getStdHoursFromRangeOverrides(lab, monthKey) {
+  const targetDate = getMonthStartFromKey(monthKey);
+  if (!targetDate) return null;
+  const targetKey = normalizeLabForMatch(lab.lab);
+  let winner = null;
+
+  stdHoursRangeOverrides.forEach(row => {
+    const from = parseISODate(row.effectiveFrom);
+    if (!from || targetDate < from) return;
+    const to = row.effectiveTo ? parseISODate(row.effectiveTo) : null;
+    if (to && targetDate > to) return;
+    if (!labKeysMatch(targetKey, row.labKey)) return;
+
+    const updatedAt = Date.parse(row.updatedAt || row.createdAt || '') || 0;
+    const score = {
+      exact: row.labKey === targetKey ? 1 : 0,
+      updatedAt,
+      id: Number(row.id || 0)
+    };
+    if (!winner
+      || score.exact > winner.score.exact
+      || (score.exact === winner.score.exact && score.updatedAt > winner.score.updatedAt)
+      || (score.exact === winner.score.exact && score.updatedAt === winner.score.updatedAt && score.id > winner.score.id)) {
+      winner = {row, score};
+    }
+  });
+
+  if (!winner) return null;
+  return Number.isFinite(winner.row.stdHours) ? winner.row.stdHours : null;
+}
+
 function getStdHoursForLabMonth(lab, monthKey) {
+  const overrideValue = getStdHoursFromRangeOverrides(lab, monthKey);
+  if (overrideValue != null) return overrideValue;
   const monthMap = stdHoursByMonth[monthKey];
   if (monthMap && Number.isFinite(monthMap[lab.lab])) return monthMap[lab.lab];
   return lab.stdHrs;
@@ -324,6 +385,139 @@ async function loadPersistedSchedule({silent = false} = {}) {
   }
   recalc();
   return true;
+}
+
+function rowsFromStdApi(overrides) {
+  return (overrides || []).map(row => ({
+    id: row.id,
+    labRaw: row.lab,
+    labKey: normalizeLabForMatch(row.labKey || row.lab),
+    stdHours: Number(row.stdHours),
+    effectiveFrom: row.effectiveFrom,
+    effectiveTo: row.effectiveTo || null,
+    createdAt: row.createdAt || null,
+    updatedAt: row.updatedAt || null
+  })).filter(row => row.labKey && Number.isFinite(row.stdHours) && row.effectiveFrom);
+}
+
+async function fetchPersistedStdHours() {
+  let res;
+  try {
+    res = await fetch('/api/std-hours', {headers: {Accept: 'application/json'}});
+  } catch (_err) {
+    return null;
+  }
+  if (res.status === 404 || res.status === 503) return null;
+  if (!res.ok) {
+    let msg = `Std-hours fetch failed (${res.status})`;
+    try {
+      const payload = await res.json();
+      if (payload && payload.error) msg = payload.error;
+    } catch (_err) {}
+    throw new Error(msg);
+  }
+  const payload = await res.json();
+  if (!payload || !Array.isArray(payload.overrides)) return [];
+  return rowsFromStdApi(payload.overrides);
+}
+
+async function loadPersistedStdHours({silent = false} = {}) {
+  const rows = await fetchPersistedStdHours();
+  if (rows == null) return false;
+  stdHoursRangeOverrides = rows;
+  stdHoursPersistenceEnabled = true;
+  if (!silent) {
+    const stEl = document.getElementById('st-std');
+    stEl.innerHTML = `<div class="file-status ok">✓ ${rows.length} persisted std-hours entries loaded</div>`;
+  }
+  recalc();
+  return true;
+}
+
+async function trySyncStdHoursToApi(file, effectiveFrom, effectiveTo) {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('effectiveFrom', effectiveFrom);
+  if (effectiveTo) fd.append('effectiveTo', effectiveTo);
+
+  let res;
+  try {
+    res = await fetch('/api/std-hours/sync', {method: 'POST', body: fd});
+  } catch (_err) {
+    return null;
+  }
+  if (res.status === 404 || res.status === 503) return null;
+  if (!res.ok) {
+    let msg = `Std-hours sync failed (${res.status})`;
+    try {
+      const payload = await res.json();
+      if (payload && payload.error) msg = payload.error;
+    } catch (_err) {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+function setStdUploadModalOpen(open) {
+  const modal = document.getElementById('std-upload-modal');
+  if (!modal) return;
+  modal.classList.toggle('show', open);
+}
+
+function closeStdUploadModal(result = null) {
+  if (stdUploadModalResolver) stdUploadModalResolver(result);
+  stdUploadModalResolver = null;
+  setStdUploadModalOpen(false);
+}
+
+function openStdUploadDateModal(fileName) {
+  return new Promise(resolve => {
+    const fromInput = document.getElementById('std-effective-from');
+    const toInput = document.getElementById('std-effective-to');
+    const fileEl = document.getElementById('std-upload-file-name');
+    if (fileEl) fileEl.textContent = fileName || 'Selected file';
+    if (fromInput) fromInput.value = fmtDateInputValue(currentWeekStart);
+    if (toInput) toInput.value = '';
+
+    stdUploadModalResolver = resolve;
+    setStdUploadModalOpen(true);
+    if (fromInput) fromInput.focus();
+  });
+}
+
+function initStdUploadModal() {
+  const cancelBtn = document.getElementById('std-upload-cancel');
+  const applyBtn = document.getElementById('std-upload-apply');
+  const modal = document.getElementById('std-upload-modal');
+
+  if (!cancelBtn || !applyBtn || !modal) return;
+
+  cancelBtn.addEventListener('click', () => closeStdUploadModal(null));
+  modal.addEventListener('click', e => {
+    if (e.target === modal) closeStdUploadModal(null);
+  });
+
+  applyBtn.addEventListener('click', () => {
+    const fromInput = document.getElementById('std-effective-from');
+    const toInput = document.getElementById('std-effective-to');
+    const from = fromInput ? String(fromInput.value || '').trim() : '';
+    const to = toInput ? String(toInput.value || '').trim() : '';
+    const fromDate = parseISODate(from);
+    const toDate = to ? parseISODate(to) : null;
+    if (!fromDate) {
+      alert('Please select a valid Effective from date.');
+      return;
+    }
+    if (to && !toDate) {
+      alert('Please select a valid Effective to date, or leave it blank.');
+      return;
+    }
+    if (toDate && fromDate > toDate) {
+      alert('Effective to date must be on or after Effective from.');
+      return;
+    }
+    closeStdUploadModal({effectiveFrom: from, effectiveTo: to || null});
+  });
 }
 
 function getTechDaysLost(weekStart) {
@@ -532,8 +726,34 @@ async function loadSchedule(e) {
 async function loadStdHours(e) {
   const file = e.target.files[0]; if (!file) return;
   const stEl = document.getElementById('st-std');
-  stEl.innerHTML = '<div class="file-status" style="color:#888">Parsing...</div>';
+  stEl.innerHTML = '<div class="file-status" style="color:#888">Waiting for date range...</div>';
   try {
+    const dateSelection = await openStdUploadDateModal(file.name);
+    if (!dateSelection) {
+      stEl.innerHTML = '<div class="file-status" style="color:#888">Upload canceled</div>';
+      return;
+    }
+
+    stEl.innerHTML = '<div class="file-status" style="color:#888">Saving...</div>';
+    const syncPayload = await trySyncStdHoursToApi(file, dateSelection.effectiveFrom, dateSelection.effectiveTo);
+    if (syncPayload) {
+      await loadPersistedStdHours({silent: true});
+      const summary = syncPayload.summary || {};
+      const inserted = summary.inserted ?? 0;
+      const updated = summary.updated ?? 0;
+      const unchanged = summary.unchanged ?? 0;
+      const dateText = dateSelection.effectiveTo
+        ? `${dateSelection.effectiveFrom} to ${dateSelection.effectiveTo}`
+        : `${dateSelection.effectiveFrom} onward`;
+      stEl.innerHTML =
+        `<div class="file-status ok">✓ ${file.name} &nbsp;·&nbsp; ${inserted} new · ${updated} updated · ${unchanged} unchanged &nbsp;·&nbsp; ${dateText}</div>`;
+      document.getElementById('footer-updated').textContent =
+        `Std hours synced to database: ${file.name} · ${new Date().toLocaleTimeString()}`;
+      recalc();
+      return;
+    }
+
+    stEl.innerHTML = '<div class="file-status" style="color:#888">Parsing (session only)...</div>';
     const rows = await parseRowsFromFile(file);
     const nextOverrides = {};
     let validRows = 0;
@@ -580,9 +800,13 @@ async function loadStdHours(e) {
 
     stdHoursOverrides = nextOverrides;
     stEl.innerHTML = `<div class="file-status ok">✓ ${file.name} &nbsp;·&nbsp; ${matchedRows} labs updated${unmatchedRows ? ` · ${unmatchedRows} unmatched` : ''}</div>`;
+    stdHoursPersistenceEnabled = false;
     recalc();
   } catch (err) {
     stEl.innerHTML = `<div class="file-status err">⚠ Parse error: ${err.message}</div>`;
+  } finally {
+    const input = document.getElementById('f-std');
+    if (input) input.value = '';
   }
 }
 
@@ -694,7 +918,10 @@ function recalc() {
   const stdText = hasStdHistoryData
     ? `Std hrs basis: ${monthKey}${stdHoursSourceName ? ` · ${stdHoursSourceName}` : ''}`
     : 'Std hrs basis: static baseline';
-  document.getElementById('week-sub').textContent = `${onsiteText} · ${hcText} · ${stdText}`;
+  const stdUploadText = stdHoursPersistenceEnabled && stdHoursRangeOverrides.length
+    ? `Std uploads active: ${stdHoursRangeOverrides.length}`
+    : 'Std uploads: none';
+  document.getElementById('week-sub').textContent = `${onsiteText} · ${hcText} · ${stdText} · ${stdUploadText}`;
 
   updateViewDecor();
   updateStatusSummary();
@@ -786,11 +1013,17 @@ function renderTable() {
 
 // Init
 async function initApp() {
+  initStdUploadModal();
   initColumnHelpTooltips();
   setSort('status');
   recalc();
   try {
     await loadPersistedSchedule();
+  } catch (_err) {
+    // Keep local-only mode if API is unavailable.
+  }
+  try {
+    await loadPersistedStdHours();
   } catch (_err) {
     // Keep local-only mode if API is unavailable.
   }

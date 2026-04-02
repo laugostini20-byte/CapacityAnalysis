@@ -76,6 +76,16 @@ function toISODateLocal(d) {
   return `${y}-${m}-${day}`;
 }
 
+function parseISODateInput(v) {
+  const s = String(v || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [y, m, d] = s.split('-').map(n => parseInt(n, 10));
+  const parsed = new Date(y, m - 1, d);
+  if (Number.isNaN(parsed.valueOf())) return null;
+  if (parsed.getFullYear() !== y || (parsed.getMonth() + 1) !== m || parsed.getDate() !== d) return null;
+  return s;
+}
+
 function normalizeLabKey(v) {
   return String(v || '')
     .toLowerCase()
@@ -145,6 +155,46 @@ function parseScheduleEvents(rows) {
   return {events: [...deduped.values()], issues};
 }
 
+function parseStdHoursOverrides(rows) {
+  const deduped = new Map();
+  const issues = [];
+
+  rows.forEach((row, idx) => {
+    const labRawVal = getRowValueByHeaders(row, [
+      'Lab',
+      'Lab / Department',
+      'Lab Name',
+      'Department',
+      'Location'
+    ]);
+    const stdRaw = getRowValueByHeaders(row, [
+      'Current Std Hours',
+      'Std Hours',
+      'Standard Hours',
+      'StdHrs',
+      'Weekly Demand',
+      'Demand Hrs'
+    ]);
+
+    const labRaw = String(labRawVal || '').trim();
+    const stdHours = parseHoursValue(stdRaw);
+    if (!labRaw || stdHours == null || stdHours < 0) {
+      issues.push(`Row ${idx + 2} skipped due to missing/invalid Lab or Std Hours`);
+      return;
+    }
+
+    const labKey = normalizeLabKey(labRaw);
+    if (!labKey) {
+      issues.push(`Row ${idx + 2} skipped due to unusable Lab value`);
+      return;
+    }
+
+    deduped.set(labKey, {labRaw, labKey, stdHours});
+  });
+
+  return {overrides: [...deduped.values()], issues};
+}
+
 async function ensureSchema() {
   if (!pool) return;
   await pool.query(SCHEMA_SQL);
@@ -210,6 +260,60 @@ async function syncEvents(client, events, filename) {
   );
 
   return {inserted, updated, unchanged, removed};
+}
+
+function isStdHoursDifferent(a, b) {
+  return Math.abs(Number(a) - Number(b)) > 1e-9;
+}
+
+async function syncStdHoursOverrides(client, overrides, filename, effectiveFrom, effectiveTo) {
+  let inserted = 0;
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const row of overrides) {
+    const existingRes = await client.query(
+      `SELECT id, lab_raw, std_hours
+       FROM std_hours_overrides
+       WHERE lab_key = $1
+         AND effective_from = $2::date
+         AND (
+           ($3::date IS NULL AND effective_to IS NULL)
+           OR effective_to = $3::date
+         )
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+      [row.labKey, effectiveFrom, effectiveTo]
+    );
+
+    const existing = existingRes.rows[0];
+    if (!existing) {
+      await client.query(
+        `INSERT INTO std_hours_overrides
+          (lab_raw, lab_key, std_hours, effective_from, effective_to, source_filename)
+         VALUES ($1, $2, $3, $4::date, $5::date, $6)`,
+        [row.labRaw, row.labKey, row.stdHours, effectiveFrom, effectiveTo, filename]
+      );
+      inserted++;
+      continue;
+    }
+
+    const changed = existing.lab_raw !== row.labRaw || isStdHoursDifferent(existing.std_hours, row.stdHours);
+    if (!changed) {
+      unchanged++;
+      continue;
+    }
+
+    await client.query(
+      `UPDATE std_hours_overrides
+       SET lab_raw = $1, std_hours = $2, source_filename = $3, updated_at = NOW()
+       WHERE id = $4`,
+      [row.labRaw, row.stdHours, filename, existing.id]
+    );
+    updated++;
+  }
+
+  return {inserted, updated, unchanged};
 }
 
 function dbRequired(res) {
@@ -322,6 +426,99 @@ app.post('/api/schedules/sync', upload.single('file'), async (req, res) => {
       summary,
       parsedRows: rows.length,
       validRows: events.length,
+      issues: issues.slice(0, 25)
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({error: err.message});
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/std-hours', async (_req, res) => {
+  if (!dbRequired(res)) return;
+
+  try {
+    const result = await pool.query(
+      `SELECT id, lab_raw, lab_key, std_hours, effective_from::text AS effective_from, effective_to::text AS effective_to,
+              created_at, updated_at
+       FROM std_hours_overrides
+       ORDER BY updated_at DESC, id DESC`
+    );
+    const overrides = result.rows.map(r => ({
+      id: Number(r.id),
+      lab: r.lab_raw,
+      labKey: r.lab_key,
+      stdHours: Number(r.std_hours),
+      effectiveFrom: r.effective_from,
+      effectiveTo: r.effective_to,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+    res.json({overrides});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.post('/api/std-hours/sync', upload.single('file'), async (req, res) => {
+  if (!dbRequired(res)) return;
+  if (!req.file) {
+    res.status(400).json({error: 'Missing upload file. Field name must be "file".'});
+    return;
+  }
+
+  const effectiveFrom = parseISODateInput(req.body.effectiveFrom);
+  const effectiveToRaw = String(req.body.effectiveTo || '').trim();
+  const effectiveTo = effectiveToRaw ? parseISODateInput(effectiveToRaw) : null;
+  if (!effectiveFrom) {
+    res.status(400).json({error: 'Effective from date is required in YYYY-MM-DD format.'});
+    return;
+  }
+  if (effectiveToRaw && !effectiveTo) {
+    res.status(400).json({error: 'Effective to date must be YYYY-MM-DD format or blank.'});
+    return;
+  }
+  if (effectiveTo && effectiveTo < effectiveFrom) {
+    res.status(400).json({error: 'Effective to date must be on or after Effective from date.'});
+    return;
+  }
+
+  let rows;
+  try {
+    rows = parseRowsFromBuffer(req.file);
+  } catch (err) {
+    res.status(400).json({error: `Could not parse file: ${err.message}`});
+    return;
+  }
+
+  const {overrides, issues} = parseStdHoursOverrides(rows);
+  if (!overrides.length) {
+    res.status(400).json({
+      error: 'No valid std-hours rows found. Expected columns like Lab and Current Std Hours.',
+      issues: issues.slice(0, 25)
+    });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const summary = await syncStdHoursOverrides(
+      client,
+      overrides,
+      req.file.originalname || 'upload',
+      effectiveFrom,
+      effectiveTo
+    );
+    await client.query('COMMIT');
+    res.json({
+      summary,
+      parsedRows: rows.length,
+      validRows: overrides.length,
+      effectiveFrom,
+      effectiveTo,
       issues: issues.slice(0, 25)
     });
   } catch (err) {

@@ -33,6 +33,8 @@ Open: `http://localhost:3000`
 - `GET /api/health`
 - `GET /api/schedules`
 - `POST /api/schedules/sync` (multipart file field: `file`)
+- `GET /api/std-hours`
+- `POST /api/std-hours/sync` (multipart fields: `file`, `effectiveFrom`, optional `effectiveTo`)
 
 ## Upload sync behavior
 
@@ -43,6 +45,13 @@ When a schedule file is uploaded:
 - Unchanged entries remain untouched.
 
 The response includes `inserted`, `updated`, and `unchanged` counts.
+
+For standard-hours uploads:
+
+- Upload a CSV/XLSX/XLS file with columns like `Lab` and `Current Std Hours`.
+- The app prompts for `Effective from` and optional `Effective to` dates.
+- Hours apply only within that date range.
+- If multiple uploads overlap for a lab/date, the newest upload wins.
 
 ## Railway deploy
 
