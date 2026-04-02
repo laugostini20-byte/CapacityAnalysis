@@ -161,23 +161,61 @@ function normalizeLabForMatch(v) {
     .trim();
 }
 
+function tokenizeLabKey(v) {
+  const stop = new Set(['cal', 'lab', 'cbl', 'dept', 'department', 'site', 'service', 'field']);
+  return normalizeLabForMatch(v)
+    .split(' ')
+    .map(t => t.trim())
+    .filter(t => t && !stop.has(t) && !/^\d+$/.test(t));
+}
+
 function findLabByKeyword(keyword) {
   const kwNorm = normalizeLabForMatch(keyword);
   if (!kwNorm) return null;
-  return BASE_LABS.find(l => {
+  const direct = BASE_LABS.find(l => {
     const labNorm = normalizeLabForMatch(l.lab);
     return labNorm.includes(kwNorm) || kwNorm.includes(labNorm);
-  }) || null;
+  });
+  if (direct) return direct;
+
+  const kwTokens = tokenizeLabKey(keyword);
+  if (!kwTokens.length) return null;
+
+  let best = null;
+  let bestScore = 0;
+  BASE_LABS.forEach(l => {
+    const labTokens = tokenizeLabKey(l.lab);
+    if (!labTokens.length) return;
+    const overlap = kwTokens.filter(t => labTokens.includes(t)).length;
+    if (!overlap) return;
+    const score = overlap / kwTokens.length;
+    if (score > bestScore) {
+      best = l;
+      bestScore = score;
+    }
+  });
+
+  return bestScore >= 0.5 ? best : null;
 }
 
 function resolveLabName(raw) {
   if (!raw) return null;
   const s = String(raw).trim();
-  const m = s.match(/^(\w+)\s*-\s*(.+)/);
+  const m = s.match(/^(.+?)\s*-\s*(.+)$/);
   if (m) {
-    const kw = SCHEDULE_LAB_MAP[m[1].trim()] || m[2].trim();
-    const found = findLabByKeyword(kw);
-    if (found) return found.lab;
+    const left = m[1].trim();
+    const right = m[2].trim();
+    const candidates = [];
+    if (SCHEDULE_LAB_MAP[left]) candidates.push(SCHEDULE_LAB_MAP[left]);
+    if (SCHEDULE_LAB_MAP[right]) candidates.push(SCHEDULE_LAB_MAP[right]);
+    if (/[a-z]/i.test(left)) candidates.push(left);
+    if (/[a-z]/i.test(right)) candidates.push(right);
+    candidates.push(s);
+
+    for (const kw of candidates) {
+      const found = findLabByKeyword(kw);
+      if (found) return found.lab;
+    }
   }
   const found = findLabByKeyword(s);
   return found ? found.lab : null;
@@ -214,6 +252,13 @@ function getMonthStartFromKey(monthKey) {
   const [y, m] = String(monthKey || '').split('-').map(v => parseInt(v, 10));
   if (!Number.isInteger(y) || !Number.isInteger(m)) return null;
   return new Date(y, m - 1, 1);
+}
+
+function getMonthBoundsFromKey(monthKey) {
+  const start = getMonthStartFromKey(monthKey);
+  if (!start) return null;
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  return {start, end};
 }
 
 function fmtDateInputValue(d) {
@@ -264,17 +309,16 @@ function getFiscalYearMonthKeys(date) {
   return Array.from({length: 12}, (_, i) => getMonthKey(addMonths(start, i)));
 }
 
-function getStdHoursFromRangeOverrides(lab, monthKey) {
-  const targetDate = getMonthStartFromKey(monthKey);
-  if (!targetDate) return null;
+function getStdHoursFromRangeOverrides(lab, periodStart, periodEnd) {
+  if (!periodStart || !periodEnd) return null;
   const targetKey = normalizeLabForMatch(lab.lab);
   let winner = null;
 
   stdHoursRangeOverrides.forEach(row => {
     const from = parseISODate(row.effectiveFrom);
-    if (!from || targetDate < from) return;
+    if (!from || from > periodEnd) return;
     const to = row.effectiveTo ? parseISODate(row.effectiveTo) : null;
-    if (to && targetDate > to) return;
+    if (to && to < periodStart) return;
     if (!labKeysMatch(targetKey, row.labKey)) return;
 
     const updatedAt = Date.parse(row.updatedAt || row.createdAt || '') || 0;
@@ -295,8 +339,18 @@ function getStdHoursFromRangeOverrides(lab, monthKey) {
   return Number.isFinite(winner.row.stdHours) ? winner.row.stdHours : null;
 }
 
+function getStdHoursForLabWeek(lab, weekStart, weekEnd) {
+  if (Object.prototype.hasOwnProperty.call(stdHoursOverrides, lab.lab)) {
+    return stdHoursOverrides[lab.lab];
+  }
+  const overrideValue = getStdHoursFromRangeOverrides(lab, weekStart, weekEnd);
+  if (overrideValue != null) return overrideValue;
+  return getStdHoursForLabMonth(lab, getMonthKey(weekStart));
+}
+
 function getStdHoursForLabMonth(lab, monthKey) {
-  const overrideValue = getStdHoursFromRangeOverrides(lab, monthKey);
+  const bounds = getMonthBoundsFromKey(monthKey);
+  const overrideValue = bounds ? getStdHoursFromRangeOverrides(lab, bounds.start, bounds.end) : null;
   if (overrideValue != null) return overrideValue;
   const monthMap = stdHoursByMonth[monthKey];
   if (monthMap && Number.isFinite(monthMap[lab.lab])) return monthMap[lab.lab];
@@ -391,7 +445,7 @@ function rowsFromStdApi(overrides) {
   return (overrides || []).map(row => ({
     id: row.id,
     labRaw: row.lab,
-    labKey: normalizeLabForMatch(row.labKey || row.lab),
+    labKey: normalizeLabForMatch(resolveLabName(row.lab) || row.labKey || row.lab),
     stdHours: Number(row.stdHours),
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo || null,
@@ -842,10 +896,10 @@ function recalc() {
   const hasStdHistoryData = Object.keys(stdHoursByMonth).length > 0;
   const hasHeadcountData = Object.keys(headcountByMonth).length > 0;
 
-  const activeLabs = BASE_LABS.filter(l => getStdHoursForLab(l, monthKey) != null);
+  const activeLabs = BASE_LABS.filter(l => getStdHoursForLabWeek(l, currentWeekStart, weekEnd) != null);
 
   labRows = activeLabs.map(l => {
-    const stdHours = getStdHoursForLab(l, monthKey);
+    const stdHours = getStdHoursForLabWeek(l, currentWeekStart, weekEnd);
     const baseTech = getHeadcountForLabMonth(l, monthKey);
     const lost    = techDaysLost[l.lab] || 0;
     const lostFTE = lost / daysPerWeek;
