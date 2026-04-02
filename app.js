@@ -216,24 +216,48 @@ function findLabByKeyword(keyword) {
 function resolveLabName(raw) {
   if (!raw) return null;
   const s = String(raw).trim();
-  const m = s.match(/^(.+?)\s*-\s*(.+)$/);
-  if (m) {
-    const left = m[1].trim();
-    const right = m[2].trim();
-    const candidates = [];
-    if (SCHEDULE_LAB_MAP[left]) candidates.push(SCHEDULE_LAB_MAP[left]);
-    if (SCHEDULE_LAB_MAP[right]) candidates.push(SCHEDULE_LAB_MAP[right]);
-    if (/[a-z]/i.test(left)) candidates.push(left);
-    if (/[a-z]/i.test(right)) candidates.push(right);
-    candidates.push(s);
+  const candidates = [];
 
-    for (const kw of candidates) {
-      const found = findLabByKeyword(kw);
-      if (found) return found.lab;
+  // Schedule-style labels often start with site code (e.g., "05 - Houston").
+  const codePrefix = s.match(/^([A-Za-z0-9]+)\s*-\s*(.+)$/);
+  if (codePrefix) {
+    const code = codePrefix[1].trim();
+    if (SCHEDULE_LAB_MAP[code]) candidates.push(SCHEDULE_LAB_MAP[code]);
+    const rightPart = codePrefix[2].trim();
+    if (/[a-z]/i.test(rightPart)) candidates.push(rightPart);
+  }
+
+  // Std-hours files often end with numeric/code suffix (e.g., "Boston - 11").
+  // Split on the last hyphen so "Rental/Used-Houston - 48" keeps the full left phrase.
+  const trailingCode = s.match(/^(.+)\s*-\s*([A-Za-z0-9]+)\s*$/);
+  if (trailingCode) {
+    const leftPart = trailingCode[1].trim();
+    const rightCode = trailingCode[2].trim();
+    if (/[a-z]/i.test(leftPart)) candidates.push(leftPart);
+    if (SCHEDULE_LAB_MAP[rightCode]) candidates.push(SCHEDULE_LAB_MAP[rightCode]);
+  } else {
+    const genericSplit = s.match(/^(.+?)\s*-\s*(.+)$/);
+    if (genericSplit) {
+      const left = genericSplit[1].trim();
+      const right = genericSplit[2].trim();
+      if (SCHEDULE_LAB_MAP[left]) candidates.push(SCHEDULE_LAB_MAP[left]);
+      if (SCHEDULE_LAB_MAP[right]) candidates.push(SCHEDULE_LAB_MAP[right]);
+      if (/[a-z]/i.test(left)) candidates.push(left);
+      if (/[a-z]/i.test(right)) candidates.push(right);
     }
   }
-  const found = findLabByKeyword(s);
-  return found ? found.lab : null;
+
+  candidates.push(s);
+
+  const seen = new Set();
+  for (const kw of candidates) {
+    const key = normalizeLabForMatch(kw);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const found = findLabByKeyword(kw);
+    if (found) return found.lab;
+  }
+  return null;
 }
 
 function normalizeHeader(v) {
