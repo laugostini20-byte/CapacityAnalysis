@@ -259,6 +259,15 @@ function parseHoursValue(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function escapeHtml(v) {
+  return String(v || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function getMonthKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
@@ -396,6 +405,7 @@ async function buildStdUploadPreview(file) {
   let matchedRows = 0;
   let unmatchedRows = 0;
   const matchedLabs = new Set();
+  const matchedMappingsBySource = new Map();
   const unmatchedLabs = new Set();
 
   for (const row of rows) {
@@ -406,12 +416,14 @@ async function buildStdUploadPreview(file) {
     usableRows++;
 
     const labName = resolveLabName(labRaw);
+    const srcLabel = String(labRaw).trim();
     if (labName) {
       matchedRows++;
       matchedLabs.add(labName);
+      matchedMappingsBySource.set(srcLabel, labName);
     } else {
       unmatchedRows++;
-      unmatchedLabs.add(String(labRaw).trim());
+      unmatchedLabs.add(srcLabel);
     }
   }
 
@@ -421,6 +433,8 @@ async function buildStdUploadPreview(file) {
     matchedRows,
     unmatchedRows,
     matchedLabs: [...matchedLabs].sort((a, b) => a.localeCompare(b)),
+    matchedMappings: [...matchedMappingsBySource.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0])),
     unmatchedLabs: [...unmatchedLabs].sort((a, b) => a.localeCompare(b))
   };
 }
@@ -579,14 +593,16 @@ function renderStdUploadPreview(preview) {
   const summaryEl = document.getElementById('std-preview-summary');
   const matchedEl = document.getElementById('std-preview-matched');
   const unmatchedEl = document.getElementById('std-preview-unmatched');
+  const matchedListEl = document.getElementById('std-preview-matched-list');
   const listEl = document.getElementById('std-preview-unmatched-list');
   const applyBtn = document.getElementById('std-upload-apply');
-  if (!summaryEl || !matchedEl || !unmatchedEl || !listEl || !applyBtn) return;
+  if (!summaryEl || !matchedEl || !unmatchedEl || !matchedListEl || !listEl || !applyBtn) return;
 
   if (!preview) {
     summaryEl.textContent = '';
     matchedEl.textContent = '';
     unmatchedEl.textContent = '';
+    matchedListEl.innerHTML = '';
     listEl.innerHTML = '';
     applyBtn.disabled = false;
     return;
@@ -594,13 +610,12 @@ function renderStdUploadPreview(preview) {
 
   summaryEl.textContent = `${preview.usableRows} usable rows found in this file (${preview.parsedRows} total rows).`;
   matchedEl.textContent = `${preview.matchedRows} rows matched (${preview.matchedLabs.length} labs in this tool).`;
+  matchedListEl.innerHTML = preview.matchedMappings
+    .map(([source, target]) => `<li><span class="match-src">${escapeHtml(source)}</span><span class="match-arrow"> → </span><span class="match-dst">${escapeHtml(target)}</span></li>`)
+    .join('');
   if (preview.unmatchedRows) {
     unmatchedEl.textContent = `${preview.unmatchedRows} rows did not match current tool labs.`;
-    const items = preview.unmatchedLabs.slice(0, 8).map(name => `<li>${name}</li>`).join('');
-    const more = preview.unmatchedLabs.length > 8
-      ? `<li class="more">+${preview.unmatchedLabs.length - 8} more</li>`
-      : '';
-    listEl.innerHTML = items + more;
+    listEl.innerHTML = preview.unmatchedLabs.map(name => `<li>${escapeHtml(name)}</li>`).join('');
   } else {
     unmatchedEl.textContent = 'All usable rows matched current tool labs.';
     listEl.innerHTML = '';

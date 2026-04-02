@@ -536,7 +536,13 @@
     color: var(--muted);
     font-size: 12px;
     line-height: 1.35;
+    max-height: 150px;
+    overflow: auto;
   }
+  .modal-preview-list li { margin-bottom: 2px; }
+  .modal-preview-list-match .match-src { color: var(--text); }
+  .modal-preview-list-match .match-arrow { color: var(--muted); }
+  .modal-preview-list-match .match-dst { color: var(--green); font-weight: 600; }
   .modal-preview-list .more { font-style: italic; }
   .modal-actions {
     margin-top: 14px;
