@@ -58,6 +58,7 @@ let colHelpTipEl = null;
 let currentView = 'weekly';
 let currentThresh = 0.85;
 let stdHoursOverrides = {};
+let schedulePersistenceEnabled = false;
 const DEFAULT_HEADCOUNT_BY_MONTH = typeof HARDCODED_MONTHLY_HEADCOUNT !== 'undefined'
   ? HARDCODED_MONTHLY_HEADCOUNT
   : {};
@@ -248,6 +249,72 @@ async function parseRowsFromFile(file) {
   return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
 }
 
+function rowsFromApiEvents(events) {
+  return (events || []).map(e => ({
+    Lab: e.lab,
+    'Start Time': e.startDate,
+    'End Time': e.endDate,
+    'Number of Tech': e.techCount
+  }));
+}
+
+async function fetchPersistedScheduleRows() {
+  let res;
+  try {
+    res = await fetch('/api/schedules', {headers: {Accept: 'application/json'}});
+  } catch (_err) {
+    return null;
+  }
+  if (res.status === 404 || res.status === 503) return null;
+  if (!res.ok) {
+    let msg = `Schedule fetch failed (${res.status})`;
+    try {
+      const payload = await res.json();
+      if (payload && payload.error) msg = payload.error;
+    } catch (_err) {}
+    throw new Error(msg);
+  }
+  const payload = await res.json();
+  if (!payload || !Array.isArray(payload.events)) return [];
+  return rowsFromApiEvents(payload.events);
+}
+
+async function trySyncScheduleToApi(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  let res;
+  try {
+    res = await fetch('/api/schedules/sync', {method: 'POST', body: fd});
+  } catch (_err) {
+    return null;
+  }
+  if (res.status === 404 || res.status === 503) return null;
+  if (!res.ok) {
+    let msg = `Upload sync failed (${res.status})`;
+    try {
+      const payload = await res.json();
+      if (payload && payload.error) msg = payload.error;
+    } catch (_err) {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+async function loadPersistedSchedule({silent = false} = {}) {
+  const rows = await fetchPersistedScheduleRows();
+  if (rows == null) return false;
+  scheduleRows = rows;
+  schedulePersistenceEnabled = true;
+  if (!silent) {
+    const stEl = document.getElementById('st-sched');
+    stEl.innerHTML = `<div class="file-status ok">✓ ${rows.length} persisted onsite entries loaded</div>`;
+    document.getElementById('footer-updated').textContent =
+      `Schedule loaded from database · ${new Date().toLocaleTimeString()}`;
+  }
+  recalc();
+  return true;
+}
+
 function getTechDaysLost(weekStart) {
   const weekEnd = addDays(weekStart, 4);
   const lost = {};
@@ -425,10 +492,26 @@ async function loadSchedule(e) {
   const stEl = document.getElementById('st-sched');
   stEl.innerHTML = '<div class="file-status" style="color:#888">Parsing...</div>';
   try {
+    const syncPayload = await trySyncScheduleToApi(file);
+    if (syncPayload) {
+      await loadPersistedSchedule({silent: true});
+      const summary = syncPayload.summary || {};
+      const inserted = summary.inserted ?? 0;
+      const updated = summary.updated ?? 0;
+      const unchanged = summary.unchanged ?? 0;
+      stEl.innerHTML = `<div class="file-status ok">✓ ${file.name} &nbsp;·&nbsp; ${inserted} new · ${updated} updated · ${unchanged} unchanged</div>`;
+      document.getElementById('footer-updated').textContent =
+        `Schedule synced to database: ${file.name} · ${new Date().toLocaleTimeString()}`;
+      recalc();
+      return;
+    }
+
     const rows = await parseRowsFromFile(file);
     scheduleRows = rows;
+    schedulePersistenceEnabled = false;
     stEl.innerHTML = `<div class="file-status ok">✓ ${file.name} &nbsp;·&nbsp; ${rows.length} entries loaded</div>`;
-    document.getElementById('footer-updated').textContent = `Schedule loaded: ${file.name} · ${new Date().toLocaleTimeString()}`;
+    document.getElementById('footer-updated').textContent =
+      `Schedule loaded (session only): ${file.name} · ${new Date().toLocaleTimeString()}`;
     recalc();
   } catch(err) {
     stEl.innerHTML = `<div class="file-status err">⚠ Parse error: ${err.message}</div>`;
@@ -581,7 +664,9 @@ function recalc() {
   const hasOnsite = scheduleRows.length > 0;
   const weekOnsiteEntries = Object.values(techDaysLost).reduce((s,v)=>s+v,0);
   const onsiteText = !hasOnsite
-    ? 'No schedule uploaded — using base headcount'
+    ? (schedulePersistenceEnabled
+      ? 'No onsite entries stored for this week'
+      : 'No schedule loaded — using base headcount')
     : weekOnsiteEntries > 0
       ? `${weekOnsiteEntries.toFixed(0)} tech-days on onsite this week`
       : 'No onsite entries for this week';
@@ -679,6 +764,15 @@ function renderTable() {
 }
 
 // Init
-initColumnHelpTooltips();
-setSort('status');
-recalc();
+async function initApp() {
+  initColumnHelpTooltips();
+  setSort('status');
+  recalc();
+  try {
+    await loadPersistedSchedule();
+  } catch (_err) {
+    // Keep local-only mode if API is unavailable.
+  }
+}
+
+initApp();
