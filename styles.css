@@ -145,21 +145,6 @@
     margin-bottom: 1rem;
     align-items: start;
   }
-  .scenario-launch-card { margin-bottom: 1rem; }
-  .scenario-launch-body {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .scenario-launch-text {
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .scenario-launch-text.is-active {
-    color: #244b70;
-    font-weight: 600;
-  }
   .scenario-tab-grid {
     display: grid;
     gap: 1rem;
@@ -286,6 +271,7 @@
     display: flex;
     gap: 10px;
     align-items: center;
+    flex-wrap: wrap;
     margin-bottom: 10px;
   }
   .scenario-toggle {
@@ -851,10 +837,6 @@
       align-items: stretch;
     }
     .scenario-grid { grid-template-columns: repeat(2, 1fr); }
-    .scenario-launch-body {
-      flex-direction: column;
-      align-items: flex-start;
-    }
     .page { padding: 1rem 1rem 3rem; }
     .modal-grid { grid-template-columns: 1fr; }
   }

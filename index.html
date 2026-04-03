@@ -104,16 +104,6 @@
       </div>
     </div>
 
-    <div class="card scenario-launch-card">
-      <div class="card-body scenario-launch-body">
-        <div>
-          <div class="card-title">Scenario Analysis</div>
-          <div class="scenario-launch-text" id="scenario-snapshot">Scenario mode is off. Use the Scenario Analysis tab to run what-if tests.</div>
-        </div>
-        <button type="button" class="scenario-btn" onclick="setPageTab('scenario')">Open Scenario Tab</button>
-      </div>
-    </div>
-
     <!-- ── Summary Metrics ── -->
     <div class="summary-grid">
       <div class="metric blue-accent">
@@ -208,6 +198,11 @@
           <div class="card-title">Scenario Lab</div>
           <div class="scenario-toolbar">
             <input class="scenario-name" type="text" id="s-name" placeholder="Scenario name (example: Q2 onsite spike)" oninput="onScenarioControlChange(false)">
+            <select class="filter-select" id="s-profile" onchange="onScenarioProfileSelect()">
+              <option value="">Saved scenarios</option>
+            </select>
+            <button type="button" class="scenario-btn" onclick="saveScenarioProfile()">Save scenario</button>
+            <button type="button" class="scenario-btn scenario-btn-light" onclick="deleteScenarioProfile()">Delete scenario</button>
             <button type="button" class="scenario-btn scenario-btn-light" onclick="resetScenarioAnalysis()">Reset adjustments</button>
           </div>
           <div class="scenario-tab-text">Scenario analysis is always active in this tab and starts from the current dashboard baseline.</div>

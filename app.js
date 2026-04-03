@@ -93,7 +93,8 @@ const defaultScenarioModel = () => ({
   onsitePct: 0,
   productivityPct: 0,
   headcountDelta: 0,
-  demandPct: 0
+  demandPct: 0,
+  selectedLabs: []
 });
 let scenarioModel = defaultScenarioModel();
 let stdHoursOverrides = {};
@@ -294,6 +295,9 @@ function normalizeScenarioConfig(raw) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
+  const selectedLabs = Array.isArray(src.selectedLabs)
+    ? [...new Set(src.selectedLabs.map(v => String(v || '').trim()).filter(Boolean))]
+    : [];
   const scopeType = String(src.scopeType || 'all').toLowerCase();
   const scopePlatform = String(src.scopePlatform || 'caltrak').toLowerCase();
   return {
@@ -303,7 +307,8 @@ function normalizeScenarioConfig(raw) {
     onsitePct: toNum(src.onsitePct, 0),
     productivityPct: toNum(src.productivityPct, 0),
     headcountDelta: toNum(src.headcountDelta, 0),
-    demandPct: toNum(src.demandPct, 0)
+    demandPct: toNum(src.demandPct, 0),
+    selectedLabs
   };
 }
 
@@ -402,7 +407,8 @@ function setScenarioModelFromControls({recalcNow = true} = {}) {
     onsitePct: onsiteEl ? onsiteEl.value : 0,
     productivityPct: prodEl ? prodEl.value : 0,
     headcountDelta: hcEl ? hcEl.value : 0,
-    demandPct: demandEl ? demandEl.value : 0
+    demandPct: demandEl ? demandEl.value : 0,
+    selectedLabs: [...scenarioSelectedLabNames]
   });
   scenarioModel = {
     ...scenarioModel,
@@ -597,15 +603,21 @@ function closeLabPickerMenu() {
   picker.classList.remove('open');
 }
 
+function syncScenarioSelectionToModel() {
+  scenarioModel.selectedLabs = [...scenarioSelectedLabNames];
+}
+
 function syncScenarioLabPickerSelection(availableLabNames) {
   const availableSet = new Set(availableLabNames);
   const filteredSelected = [...scenarioSelectedLabNames].filter(name => availableSet.has(name));
   if (!scenarioLabPickerInitialized) {
     scenarioSelectedLabNames = new Set(availableLabNames);
     scenarioLabPickerInitialized = true;
+    syncScenarioSelectionToModel();
     return;
   }
   scenarioSelectedLabNames = new Set(filteredSelected);
+  syncScenarioSelectionToModel();
 }
 
 function updateScenarioLabPickerSummary(availableLabNames = getScenarioAvailableLabNames()) {
@@ -668,6 +680,7 @@ function getScenarioSelectedRows() {
 function toggleScenarioLabSelection(labName, isSelected) {
   if (isSelected) scenarioSelectedLabNames.add(labName);
   else scenarioSelectedLabNames.delete(labName);
+  syncScenarioSelectionToModel();
   updateScenarioLabPickerSummary();
   recalc();
 }
@@ -675,6 +688,7 @@ function toggleScenarioLabSelection(labName, isSelected) {
 function selectAllScenarioLabs(e) {
   if (e) e.stopPropagation();
   scenarioSelectedLabNames = new Set(getScenarioAvailableLabNames());
+  syncScenarioSelectionToModel();
   renderScenarioLabPickerOptions();
   recalc();
 }
@@ -682,6 +696,7 @@ function selectAllScenarioLabs(e) {
 function deselectAllScenarioLabs(e) {
   if (e) e.stopPropagation();
   scenarioSelectedLabNames.clear();
+  syncScenarioSelectionToModel();
   renderScenarioLabPickerOptions();
   recalc();
 }
@@ -1283,6 +1298,7 @@ function onScenarioProfileSelect() {
   const selectedId = Number.parseInt(selectEl.value, 10);
   if (!Number.isInteger(selectedId)) {
     scenarioModel.id = null;
+    syncScenarioSelectionToModel();
     updateScenarioControls();
     return;
   }
@@ -1295,6 +1311,13 @@ function onScenarioProfileSelect() {
     name: profile.name,
     enabled: true
   };
+  if (Array.isArray(profile.config && profile.config.selectedLabs)) {
+    const availableLabs = new Set(getScenarioAvailableLabNames());
+    const selectedLabs = (scenarioModel.selectedLabs || []).filter(name => availableLabs.has(name));
+    scenarioSelectedLabNames = new Set(selectedLabs);
+    scenarioLabPickerInitialized = true;
+    syncScenarioSelectionToModel();
+  }
   updateScenarioControls();
   recalc();
 }
