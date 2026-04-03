@@ -336,8 +336,8 @@ function renderLabPickerOptions() {
 
   menu.innerHTML = `
     <div class="lab-picker-actions">
-      <button type="button" class="lab-picker-action" onclick="selectAllLabs()">Select all</button>
-      <button type="button" class="lab-picker-action" onclick="deselectAllLabs()">Deselect all</button>
+      <button type="button" class="lab-picker-action" onclick="selectAllLabs(event)">Select all</button>
+      <button type="button" class="lab-picker-action" onclick="deselectAllLabs(event)">Deselect all</button>
     </div>
     <div class="lab-picker-search-wrap">
       <input type="text" class="lab-picker-search" id="lab-picker-search" placeholder="Search labs..." value="${escapeHtml(labPickerSearchTerm)}" oninput="onLabPickerSearchInput(this.value)">
@@ -361,13 +361,15 @@ function toggleLabSelection(labName, isSelected) {
   renderTable();
 }
 
-function selectAllLabs() {
+function selectAllLabs(e) {
+  if (e) e.stopPropagation();
   selectedLabNames = new Set(getAvailableLabNames());
   renderLabPickerOptions();
   renderTable();
 }
 
-function deselectAllLabs() {
+function deselectAllLabs(e) {
+  if (e) e.stopPropagation();
   selectedLabNames.clear();
   renderLabPickerOptions();
   renderTable();
@@ -387,10 +389,10 @@ function applyLabPickerSearch() {
   options.forEach(option => {
     const key = option.getAttribute('data-lab-key') || '';
     const isMatch = !labPickerSearchTerm || key.includes(labPickerSearchTerm);
-    option.hidden = !isMatch;
+    option.style.display = isMatch ? '' : 'none';
     if (isMatch) shownCount += 1;
   });
-  if (noResultsEl) noResultsEl.hidden = shownCount !== 0;
+  if (noResultsEl) noResultsEl.style.display = shownCount === 0 ? 'block' : 'none';
 }
 
 function toggleLabPickerMenu(e) {
