@@ -167,52 +167,64 @@ const VIEW_META = {
   weekly: {
     label: 'Weekly',
     demandKey: 'wDemand',
+    historicalDemandKey: 'wHistoricalDemand',
     capKey: 'wCap',
     gapKey: 'wGap',
     utilKey: 'wUtil',
     demandHeader: 'Std hrs',
+    historicalDemandHeader: 'Hist std hrs',
     capHeader: 'Weekly cap',
     gapHeader: 'Weekly gap',
     demandHelp: 'Standard weekly demand hours for the lab.',
+    historicalDemandHelp: 'Standard demand hours for the same week one year earlier.',
     capHelp: 'Estimated weekly supply capacity from available techs and assumptions.',
     gapHelp: 'Weekly cap minus weekly demand; negative means shortfall.'
   },
   monthly: {
     label: 'Monthly',
     demandKey: 'mDemand',
+    historicalDemandKey: 'mHistoricalDemand',
     capKey: 'mCap',
     gapKey: 'mGap',
     utilKey: 'mUtil',
     demandHeader: 'Month demand',
+    historicalDemandHeader: 'Hist month demand',
     capHeader: 'Month cap',
     gapHeader: 'Month gap',
     demandHelp: 'Estimated monthly demand converted from weekly demand using Weeks/month.',
+    historicalDemandHelp: 'Demand for this month using the prior-year weekly standard-hours baseline scaled by Weeks/month.',
     capHelp: 'Estimated monthly capacity using Weeks/month.',
     gapHelp: 'Monthly cap minus monthly demand; negative means shortfall.'
   },
   quarterly: {
     label: 'Quarterly',
     demandKey: 'qDemand',
+    historicalDemandKey: 'qHistoricalDemand',
     capKey: 'qCap',
     gapKey: 'qGap',
     utilKey: 'qUtil',
     demandHeader: 'Qtr demand',
+    historicalDemandHeader: 'Hist qtr demand',
     capHeader: 'Qtr cap',
     gapHeader: 'Qtr gap',
     demandHelp: 'Demand for the fiscal quarter (3 months). Fiscal calendar runs Apr-Mar.',
+    historicalDemandHelp: 'Demand for the fiscal quarter using same-month prior-year standard-hours values.',
     capHelp: 'Capacity for the fiscal quarter (3 months). Fiscal calendar runs Apr-Mar.',
     gapHelp: 'Quarter cap minus quarter demand; negative means shortfall.'
   },
   yearly: {
     label: 'Yearly',
     demandKey: 'yDemand',
+    historicalDemandKey: 'yHistoricalDemand',
     capKey: 'yCap',
     gapKey: 'yGap',
     utilKey: 'yUtil',
     demandHeader: 'FY demand',
+    historicalDemandHeader: 'Hist FY demand',
     capHeader: 'FY cap',
     gapHeader: 'FY gap',
     demandHelp: 'Demand for the full fiscal year (Apr-Mar).',
+    historicalDemandHelp: 'Demand for the full fiscal year using same-month prior-year standard-hours values.',
     capHelp: 'Capacity for the full fiscal year (Apr-Mar).',
     gapHelp: 'Fiscal-year capacity minus fiscal-year demand; negative means shortfall.'
   }
@@ -1030,6 +1042,30 @@ function getStdHoursForLab(lab, monthKey = getMonthKey(currentWeekStart)) {
   return getStdHoursForLabMonth(lab, monthKey);
 }
 
+function getHistoricalStdHoursForLabMonth(lab, monthKey) {
+  const monthStart = getMonthStartFromKey(monthKey);
+  if (!monthStart) return null;
+  const historicalMonthStart = addMonths(monthStart, -12);
+  const historicalMonthKey = getMonthKey(historicalMonthStart);
+  const bounds = getMonthBoundsFromKey(historicalMonthKey);
+  const overrideValue = bounds ? getStdHoursFromRangeOverrides(lab, bounds.start, bounds.end) : null;
+  if (overrideValue != null) return overrideValue;
+  const monthMap = stdHoursByMonth[historicalMonthKey];
+  if (monthMap && Number.isFinite(monthMap[lab.lab])) return monthMap[lab.lab];
+  return null;
+}
+
+function getHistoricalStdHoursForLabWeek(lab, weekStart, weekEnd) {
+  if (!weekStart || !weekEnd) return null;
+  const historicalWeekStart = new Date(weekStart);
+  historicalWeekStart.setFullYear(historicalWeekStart.getFullYear() - 1);
+  const historicalWeekEnd = new Date(weekEnd);
+  historicalWeekEnd.setFullYear(historicalWeekEnd.getFullYear() - 1);
+  const overrideValue = getStdHoursFromRangeOverrides(lab, historicalWeekStart, historicalWeekEnd);
+  if (overrideValue != null) return overrideValue;
+  return getHistoricalStdHoursForLabMonth(lab, getMonthKey(weekStart));
+}
+
 async function parseRowsFromFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'csv') {
@@ -1553,6 +1589,10 @@ function getDemandForView(row) {
   return row[getActiveViewMeta().demandKey];
 }
 
+function getHistoricalDemandForView(row) {
+  return row[getActiveViewMeta().historicalDemandKey];
+}
+
 function getCapForView(row) {
   return row[getActiveViewMeta().capKey];
 }
@@ -1567,11 +1607,13 @@ function getUtilForView(row) {
 
 function getBaselineMetricsForRow(row) {
   const demand = getDemandForView(row);
+  const historicalDemand = getHistoricalDemandForView(row);
   const cap = getCapForView(row);
   const gap = getGapForView(row);
   const util = getUtilForView(row);
   return {
     demand,
+    historicalDemand,
     cap,
     gap,
     util,
@@ -1605,14 +1647,20 @@ function fmtHrs(v) {
 function updateViewDecor() {
   const meta = getActiveViewMeta();
   const demandEl = document.getElementById('hdr-demand');
+  const historicalDemandEl = document.getElementById('hdr-historical-demand');
   const capEl = document.getElementById('hdr-cap');
   const gapEl = document.getElementById('hdr-gap');
   const scenarioDemandEl = document.getElementById('s-hdr-demand');
+  const scenarioHistoricalDemandEl = document.getElementById('s-hdr-historical-demand');
   const scenarioCapEl = document.getElementById('s-hdr-cap');
   const scenarioGapEl = document.getElementById('s-hdr-gap');
   if (demandEl) {
     demandEl.textContent = meta.demandHeader;
     demandEl.setAttribute('data-help', meta.demandHelp);
+  }
+  if (historicalDemandEl) {
+    historicalDemandEl.textContent = meta.historicalDemandHeader;
+    historicalDemandEl.setAttribute('data-help', meta.historicalDemandHelp);
   }
   if (capEl) {
     capEl.textContent = meta.capHeader;
@@ -1627,6 +1675,10 @@ function updateViewDecor() {
   if (scenarioDemandEl) {
     scenarioDemandEl.textContent = meta.demandHeader;
     scenarioDemandEl.setAttribute('data-help', meta.demandHelp);
+  }
+  if (scenarioHistoricalDemandEl) {
+    scenarioHistoricalDemandEl.textContent = meta.historicalDemandHeader;
+    scenarioHistoricalDemandEl.setAttribute('data-help', meta.historicalDemandHelp);
   }
   if (scenarioCapEl) {
     scenarioCapEl.textContent = meta.capHeader;
@@ -1692,6 +1744,7 @@ function computeScenarioRows(context) {
 
     scenarioRowsByLab.set(row.lab, {
       demand: scenarioDemand,
+      historicalDemand: baseline.historicalDemand,
       cap: scenarioCap,
       gap: scenarioGap,
       util: scenarioUtil,
@@ -2021,6 +2074,7 @@ function recalc() {
 
   const mapLabsToRows = (labs, techDaysLostMap) => labs.map(l => {
     const stdHours = getStdHoursForLabWeek(l, currentWeekStart, weekEnd);
+    const historicalStdHours = getHistoricalStdHoursForLabWeek(l, currentWeekStart, weekEnd);
     const baseTech = getHeadcountForLabMonth(l, monthKey);
     const hcMonth = getHeadcountForLabMonth(l, monthKey);
     const hcQuarterSum = quarterKeys.reduce((s, k) => s + getHeadcountForLabMonth(l, k), 0);
@@ -2030,6 +2084,19 @@ function recalc() {
     const avail   = Math.max(0, baseTech - lostFTE);
     const wDemand = stdHours;
     const mDemand = wDemand * weeksPerMo;
+    const wHistoricalDemand = historicalStdHours;
+    const mHistoricalDemand = wHistoricalDemand != null ? wHistoricalDemand * weeksPerMo : null;
+    const sumHistoricalDemandForMonthKeys = monthKeys => {
+      let total = 0;
+      let hasData = false;
+      monthKeys.forEach(k => {
+        const wkStd = getHistoricalStdHoursForLabMonth(l, k);
+        if (wkStd == null) return;
+        hasData = true;
+        total += wkStd * weeksPerMo;
+      });
+      return hasData ? total : null;
+    };
     const qDemand = quarterKeys.reduce((s, k) => {
       const wkStd = getStdHoursForLab(l, k);
       return s + (wkStd != null ? wkStd * weeksPerMo : 0);
@@ -2038,6 +2105,8 @@ function recalc() {
       const wkStd = getStdHoursForLab(l, k);
       return s + (wkStd != null ? wkStd * weeksPerMo : 0);
     }, 0);
+    const qHistoricalDemand = sumHistoricalDemandForMonthKeys(quarterKeys);
+    const yHistoricalDemand = sumHistoricalDemandForMonthKeys(yearKeys);
 
     const wCap    = avail * hrsPerDay * daysPerWeek;
     const monthCapPerFte = hrsPerDay * daysPerWeek * weeksPerMo;
@@ -2068,6 +2137,10 @@ function recalc() {
       mDemand,
       qDemand,
       yDemand,
+      wHistoricalDemand,
+      mHistoricalDemand,
+      qHistoricalDemand,
+      yHistoricalDemand,
       wCap,
       mCap,
       qCap,
@@ -2171,6 +2244,7 @@ function buildTableRowsHtml(rows, {useScenario = false} = {}) {
     const display = getDisplayMetricsForRow(r, {useScenario});
     const baseline = display.baseline;
     const demand = display.demand;
+    const historicalDemand = display.historicalDemand;
     const cap = display.cap;
     const gap = display.gap;
     const util = display.util;
@@ -2217,6 +2291,7 @@ function buildTableRowsHtml(rows, {useScenario = false} = {}) {
       <td class="num">${lostDisp}${onsiteSub}</td>
       <td class="num">${availDisp}${availSub}</td>
       <td class="num">${fmtHrs(demand)}${demandSub}</td>
+      <td class="num">${fmtHrs(historicalDemand)}</td>
       <td class="num">${fmtHrs(cap)}${capSub}</td>
       <td class="num ${gapCls}">${gapStr}${gapSub}</td>
       <td class="util-cell">${utilPct != null ? `
@@ -2240,7 +2315,7 @@ function renderRowsIntoTable({
   if (!bodyEl) return;
   if (rowCountEl) rowCountEl.textContent = `${rows.length} lab${rows.length !== 1 ? 's' : ''}`;
   if (!rows.length) {
-    bodyEl.innerHTML = `<tr><td colspan="9">
+    bodyEl.innerHTML = `<tr><td colspan="10">
       <div class="empty-state">
         <div class="empty-icon">🔍</div>
         <div class="empty-title">${escapeHtml(emptyTitle)}</div>

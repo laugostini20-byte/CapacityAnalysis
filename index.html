@@ -176,13 +176,14 @@
             <tr>
               <th style="width:22%" data-sort="name" data-help="Lab location or business unit name." onclick="setSort('name')">Lab <span class="sort-arrow" id="arr-name"></span></th>
               <th style="width:8%" class="num" data-sort="headcount" data-help="Starting technician headcount for the selected month before onsite deductions." onclick="setSort('headcount')">Base techs <span class="sort-arrow" id="arr-headcount"></span></th>
-              <th style="width:9%" class="num" data-sort="onsite" data-help="FTEs assigned to onsite work this week (derived from uploaded schedule)." onclick="setSort('onsite')">On onsite <span class="sort-arrow" id="arr-onsite"></span></th>
-              <th style="width:9%" class="num" data-help="Technicians available for lab work after onsite assignments (Base techs minus On onsite).">Avail</th>
-              <th style="width:9%" class="num" id="hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
-              <th style="width:10%" class="num" id="hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
-              <th style="width:10%" class="num" id="hdr-gap" data-sort="gap" data-help="Weekly cap minus Std hrs; negative means shortfall." onclick="setSort('gap')">Weekly gap <span class="sort-arrow" id="arr-gap"></span></th>
-              <th style="width:13%" class="num" data-sort="util" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity." onclick="setSort('util')">Utilization <span class="sort-arrow" id="arr-util"></span></th>
-              <th style="width:10%" class="num" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
+              <th style="width:8%" class="num" data-sort="onsite" data-help="FTEs assigned to onsite work this week (derived from uploaded schedule)." onclick="setSort('onsite')">On onsite <span class="sort-arrow" id="arr-onsite"></span></th>
+              <th style="width:8%" class="num" data-help="Technicians available for lab work after onsite assignments (Base techs minus On onsite).">Avail</th>
+              <th style="width:8%" class="num" id="hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
+              <th style="width:10%" class="num" id="hdr-historical-demand" data-help="Standard demand hours for the same week one year earlier.">Hist std hrs</th>
+              <th style="width:9%" class="num" id="hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
+              <th style="width:9%" class="num" id="hdr-gap" data-sort="gap" data-help="Weekly cap minus Std hrs; negative means shortfall." onclick="setSort('gap')">Weekly gap <span class="sort-arrow" id="arr-gap"></span></th>
+              <th style="width:10%" class="num" data-sort="util" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity." onclick="setSort('util')">Utilization <span class="sort-arrow" id="arr-util"></span></th>
+              <th style="width:8%" class="num" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
             </tr>
           </thead>
           <tbody id="tbl-body"></tbody>
@@ -255,13 +256,14 @@
               <tr>
                 <th style="width:22%" data-help="Lab location or business unit name.">Lab</th>
                 <th style="width:8%" class="num" data-help="Starting technician headcount for the selected month before onsite deductions.">Base techs</th>
-                <th style="width:9%" class="num" data-help="FTEs assigned to onsite work this week (derived from uploaded schedule).">On onsite</th>
-                <th style="width:9%" class="num" data-help="Technicians available for lab work after onsite assignments (Base techs minus On onsite).">Avail</th>
-                <th style="width:9%" class="num" id="s-hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
-                <th style="width:10%" class="num" id="s-hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
-                <th style="width:10%" class="num" id="s-hdr-gap" data-help="Weekly cap minus Std hrs; negative means shortfall.">Weekly gap</th>
-                <th style="width:13%" class="num" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity.">Utilization</th>
-                <th style="width:10%" class="num" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
+                <th style="width:8%" class="num" data-help="FTEs assigned to onsite work this week (derived from uploaded schedule).">On onsite</th>
+                <th style="width:8%" class="num" data-help="Technicians available for lab work after onsite assignments (Base techs minus On onsite).">Avail</th>
+                <th style="width:8%" class="num" id="s-hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
+                <th style="width:10%" class="num" id="s-hdr-historical-demand" data-help="Standard demand hours for the same week one year earlier.">Hist std hrs</th>
+                <th style="width:9%" class="num" id="s-hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
+                <th style="width:9%" class="num" id="s-hdr-gap" data-help="Weekly cap minus Std hrs; negative means shortfall.">Weekly gap</th>
+                <th style="width:10%" class="num" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity.">Utilization</th>
+                <th style="width:8%" class="num" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
               </tr>
             </thead>
             <tbody id="s-tbl-body"></tbody>
