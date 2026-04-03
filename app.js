@@ -80,6 +80,7 @@ let selectAllVisibleLabsOnNextRender = false;
 let scenarioSelectedLabNames = new Set();
 let scenarioLabPickerInitialized = false;
 let scenarioLabPickerSearchTerm = '';
+let scenarioLastAvailableLabNames = new Set();
 let scenarioProfiles = [];
 let scenarioPersistenceEnabled = false;
 let scenarioRowsByLab = new Map();
@@ -565,6 +566,7 @@ function toggleLabSelection(labName, isSelected) {
 function selectAllLabs(e) {
   if (e) e.stopPropagation();
   selectedLabNames = new Set(getAvailableLabNames());
+  labPickerSearchTerm = '';
   renderLabPickerOptions();
   renderTable();
 }
@@ -572,6 +574,7 @@ function selectAllLabs(e) {
 function deselectAllLabs(e) {
   if (e) e.stopPropagation();
   selectedLabNames.clear();
+  labPickerSearchTerm = '';
   renderLabPickerOptions();
   renderTable();
 }
@@ -627,14 +630,25 @@ function syncScenarioSelectionToModel() {
 
 function syncScenarioLabPickerSelection(availableLabNames) {
   const availableSet = new Set(availableLabNames);
+  const previousAvailableSet = scenarioLastAvailableLabNames;
   const filteredSelected = [...scenarioSelectedLabNames].filter(name => availableSet.has(name));
+  const hadAllPreviouslyAvailableSelected = previousAvailableSet.size > 0
+    && [...previousAvailableSet].every(name => scenarioSelectedLabNames.has(name));
   if (!scenarioLabPickerInitialized) {
     scenarioSelectedLabNames = new Set(availableLabNames);
     scenarioLabPickerInitialized = true;
+    scenarioLastAvailableLabNames = new Set(availableLabNames);
+    syncScenarioSelectionToModel();
+    return;
+  }
+  if (hadAllPreviouslyAvailableSelected) {
+    scenarioSelectedLabNames = new Set(availableLabNames);
+    scenarioLastAvailableLabNames = new Set(availableLabNames);
     syncScenarioSelectionToModel();
     return;
   }
   scenarioSelectedLabNames = new Set(filteredSelected);
+  scenarioLastAvailableLabNames = new Set(availableLabNames);
   syncScenarioSelectionToModel();
 }
 
@@ -706,6 +720,7 @@ function toggleScenarioLabSelection(labName, isSelected) {
 function selectAllScenarioLabs(e) {
   if (e) e.stopPropagation();
   scenarioSelectedLabNames = new Set(getScenarioAvailableLabNames());
+  scenarioLabPickerSearchTerm = '';
   syncScenarioSelectionToModel();
   renderScenarioLabPickerOptions();
   recalc();
@@ -714,6 +729,7 @@ function selectAllScenarioLabs(e) {
 function deselectAllScenarioLabs(e) {
   if (e) e.stopPropagation();
   scenarioSelectedLabNames.clear();
+  scenarioLabPickerSearchTerm = '';
   syncScenarioSelectionToModel();
   renderScenarioLabPickerOptions();
   recalc();
@@ -1334,6 +1350,7 @@ function onScenarioProfileSelect() {
     const selectedLabs = (scenarioModel.selectedLabs || []).filter(name => availableLabs.has(name));
     scenarioSelectedLabNames = new Set(selectedLabs);
     scenarioLabPickerInitialized = true;
+    scenarioLastAvailableLabNames = new Set(availableLabs);
     syncScenarioSelectionToModel();
   }
   if (VIEW_META[scenarioModel.view]) currentView = scenarioModel.view;
