@@ -48,6 +48,18 @@ const SCHEDULE_LAB_MAP = {
   '19':'Los Angeles','23':'Denver','24':'Phoenix','31':'San Diego',
   '33':'Ottawa','61':'Palm Beach','M5':'St. Louis'
 };
+const INDYSOFT_LABS = new Set([
+  'Tangent Decatur Cal Lab',
+  'Tangent Indianapolis Lab',
+  'Montreal Cal Lab',
+  'Biomedical',
+  'Chesapeake Cal Lab',
+  'Cleveland Cal Lab',
+  'San Diego Cal Lab',
+  'Pipettes Milford Lab',
+  'Pipettes Field Service',
+  'Pipettes San Diego Lab'
+]);
 
 let scheduleRows = [];
 let currentWeekStart = getThisMonday();
@@ -57,6 +69,7 @@ let sortDir = 1;
 let colHelpTipEl = null;
 let currentView = 'weekly';
 let currentThresh = 0.85;
+let showIndysoftLabs = false;
 let stdHoursOverrides = {};
 const DEFAULT_STD_HOURS_BY_MONTH = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined'
   ? HARDCODED_STD_HOURS_BY_MONTH
@@ -243,6 +256,23 @@ function findLabByKeyword(keyword) {
   });
 
   return bestScore >= 0.5 ? best : null;
+}
+
+function getLabPlatform(labName) {
+  return INDYSOFT_LABS.has(labName) ? 'Indysoft' : 'CalTrak';
+}
+
+function updatePlatformToggleButton() {
+  const btn = document.getElementById('platform-toggle-btn');
+  if (!btn) return;
+  btn.textContent = showIndysoftLabs ? 'Hide Indysoft' : 'Show Indysoft';
+  btn.classList.toggle('active', showIndysoftLabs);
+}
+
+function toggleIndysoftLabs() {
+  showIndysoftLabs = !showIndysoftLabs;
+  updatePlatformToggleButton();
+  recalc();
 }
 
 function resolveLabName(raw) {
@@ -1063,7 +1093,9 @@ function recalc() {
   const hasStdHistoryData = Object.keys(stdHoursByMonth).length > 0;
   const hasHeadcountData = Object.keys(headcountByMonth).length > 0;
 
-  const activeLabs = BASE_LABS.filter(l => getStdHoursForLabWeek(l, currentWeekStart, weekEnd) != null);
+  const activeLabs = BASE_LABS
+    .filter(l => getStdHoursForLabWeek(l, currentWeekStart, weekEnd) != null)
+    .filter(l => showIndysoftLabs || getLabPlatform(l.lab) === 'CalTrak');
 
   labRows = activeLabs.map(l => {
     const stdHours = getStdHoursForLabWeek(l, currentWeekStart, weekEnd);
@@ -1100,6 +1132,7 @@ function recalc() {
 
     return {
       ...l,
+      platform: getLabPlatform(l.lab),
       baseTech,
       lostFTE,
       avail,
@@ -1215,7 +1248,7 @@ function renderTable() {
     else badge='<span class="badge badge-ok">&#10003; Healthy</span>';
 
     return `<tr>
-      <td class="lab-name">${r.lab}</td>
+      <td class="lab-name-cell"><div class="lab-name">${r.lab}</div><div class="platform-tag ${r.platform === 'Indysoft' ? 'platform-indysoft' : 'platform-caltrak'}">${r.platform}</div></td>
       <td class="num">${r.baseTech}</td>
       <td class="num">${lostDisp}</td>
       <td class="num">${availDisp}</td>
@@ -1236,6 +1269,7 @@ function renderTable() {
 async function initApp() {
   initStdUploadModal();
   initColumnHelpTooltips();
+  updatePlatformToggleButton();
   setSort('status');
   recalc();
   try {
