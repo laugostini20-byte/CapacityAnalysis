@@ -152,7 +152,7 @@
   }
   .upload-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 10px;
   }
   .upload-panel {
@@ -693,7 +693,6 @@
   /* ── Responsive ── */
   @media (max-width: 900px) {
     .top-grid { grid-template-columns: 1fr; }
-    .upload-grid { grid-template-columns: 1fr; }
     .summary-grid { grid-template-columns: repeat(3, 1fr); }
     .params-grid { grid-template-columns: repeat(2, 1fr); }
     .page { padding: 1rem 1rem 3rem; }
