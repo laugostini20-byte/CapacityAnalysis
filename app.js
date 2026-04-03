@@ -72,6 +72,7 @@ let currentThresh = 0.85;
 let showIndysoftLabs = false;
 let selectedLabNames = new Set();
 let labPickerInitialized = false;
+let labPickerSearchTerm = '';
 let stdHoursOverrides = {};
 const DEFAULT_STD_HOURS_BY_MONTH = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined'
   ? HARDCODED_STD_HOURS_BY_MONTH
@@ -324,21 +325,27 @@ function renderLabPickerOptions() {
   updateLabPickerSummary(availableLabNames);
 
   if (!availableLabNames.length) {
+    labPickerSearchTerm = '';
     menu.innerHTML = '<div class="lab-picker-empty">No labs available for this view.</div>';
     return;
   }
 
   const optionsHtml = availableLabNames
-    .map(name => `<label class="lab-picker-option"><input type="checkbox" value="${escapeHtml(name)}" onchange="toggleLabSelection(this.value, this.checked)" ${selectedLabNames.has(name) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`)
+    .map(name => `<label class="lab-picker-option" data-lab-key="${escapeHtml(normalizeLabForMatch(name))}"><input type="checkbox" value="${escapeHtml(name)}" onchange="toggleLabSelection(this.value, this.checked)" ${selectedLabNames.has(name) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`)
     .join('');
 
   menu.innerHTML = `
     <div class="lab-picker-actions">
       <button type="button" class="lab-picker-action" onclick="selectAllLabs()">Select all</button>
-      <button type="button" class="lab-picker-action" onclick="clearLabSelection()">Clear</button>
+      <button type="button" class="lab-picker-action" onclick="deselectAllLabs()">Deselect all</button>
     </div>
-    <div class="lab-picker-list">${optionsHtml}</div>
+    <div class="lab-picker-search-wrap">
+      <input type="text" class="lab-picker-search" id="lab-picker-search" placeholder="Search labs..." value="${escapeHtml(labPickerSearchTerm)}" oninput="onLabPickerSearchInput(this.value)">
+    </div>
+    <div class="lab-picker-list" id="lab-picker-list">${optionsHtml}</div>
+    <div class="lab-picker-empty" id="lab-picker-no-results" hidden>No labs match your search.</div>
   `;
+  applyLabPickerSearch();
 }
 
 function getSelectedRows() {
@@ -360,10 +367,30 @@ function selectAllLabs() {
   renderTable();
 }
 
-function clearLabSelection() {
+function deselectAllLabs() {
   selectedLabNames.clear();
   renderLabPickerOptions();
   renderTable();
+}
+
+function onLabPickerSearchInput(value) {
+  labPickerSearchTerm = normalizeLabForMatch(value || '');
+  applyLabPickerSearch();
+}
+
+function applyLabPickerSearch() {
+  const list = document.getElementById('lab-picker-list');
+  if (!list) return;
+  const noResultsEl = document.getElementById('lab-picker-no-results');
+  const options = list.querySelectorAll('.lab-picker-option');
+  let shownCount = 0;
+  options.forEach(option => {
+    const key = option.getAttribute('data-lab-key') || '';
+    const isMatch = !labPickerSearchTerm || key.includes(labPickerSearchTerm);
+    option.hidden = !isMatch;
+    if (isMatch) shownCount += 1;
+  });
+  if (noResultsEl) noResultsEl.hidden = shownCount !== 0;
 }
 
 function toggleLabPickerMenu(e) {
@@ -375,6 +402,8 @@ function toggleLabPickerMenu(e) {
   if (isHidden) {
     menu.removeAttribute('hidden');
     picker.classList.add('open');
+    const searchInput = document.getElementById('lab-picker-search');
+    if (searchInput) searchInput.focus();
   } else {
     menu.setAttribute('hidden', '');
     picker.classList.remove('open');

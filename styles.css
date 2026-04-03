@@ -318,6 +318,24 @@
     border-color: var(--blue);
     color: var(--blue);
   }
+  .lab-picker-search-wrap {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--white);
+  }
+  .lab-picker-search {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--white);
+    color: var(--text);
+    font-size: 12px;
+    padding: 7px 9px;
+  }
+  .lab-picker-search:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
   .lab-picker-list {
     max-height: 280px;
     overflow: auto;
@@ -343,6 +361,7 @@
     padding: 10px;
     font-size: 12px;
     color: var(--muted);
+    border-top: 1px solid var(--border);
   }
   .filter-select {
     padding: 8px 10px;
