@@ -373,7 +373,7 @@ function updateScenarioSnapshot() {
     `Onsite techs ${fmtSigned(scenarioModel.onsiteTechDelta)} · ` +
     `Productivity ${fmtSigned(scenarioModel.productivityPct, '%')} · ` +
     `Headcount ${fmtSigned(scenarioModel.headcountDelta)} · ` +
-    `Std hrs ${fmtSigned(scenarioModel.stdHoursDelta)} · Dashboard remains baseline`;
+    `Std hrs/wk ${fmtSigned(scenarioModel.stdHoursDelta)} · Dashboard remains baseline`;
 }
 
 function updateScenarioControls() {
@@ -1726,7 +1726,14 @@ function computeScenarioRows(context) {
     const scenarioBaseTech = Math.max(0, row.baseTech + hcDelta);
     const scenarioLostFTE = Math.max(0, row.lostFTE + onsiteTechDelta);
     const scenarioAvail = Math.max(0, scenarioBaseTech - scenarioLostFTE);
-    const scenarioDemand = Math.max(0, baseline.demand + stdHoursDelta);
+    const stdHoursDeltaForView = currentView === 'monthly'
+      ? stdHoursDelta * context.weeksPerMo
+      : currentView === 'quarterly'
+        ? stdHoursDelta * context.weeksPerMo * context.quarterMonthCount
+        : currentView === 'yearly'
+          ? stdHoursDelta * context.weeksPerMo * context.yearMonthCount
+          : stdHoursDelta;
+    const scenarioDemand = Math.max(0, baseline.demand + stdHoursDeltaForView);
 
     const scenarioWCap = scenarioAvail * effectiveHrsPerDay * context.daysPerWeek;
     const scenarioMCap = Math.max(0, row.hcMonth + hcDelta) * monthCapPerFte;
