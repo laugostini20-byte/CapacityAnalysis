@@ -64,6 +64,7 @@ const INDYSOFT_LABS = new Set([
 let scheduleRows = [];
 let currentWeekStart = getThisMonday();
 let labRows = [];
+let scenarioLabRows = [];
 let sortKey = 'status';
 let sortDir = 1;
 let colHelpTipEl = null;
@@ -318,7 +319,7 @@ function getScenarioProfileNameFallback() {
 
 function getScenarioScopeLabel() {
   const selectedCount = scenarioSelectedLabNames.size;
-  const totalCount = labRows.length;
+  const totalCount = scenarioLabRows.length;
   if (!totalCount) return 'no labs';
   if (!selectedCount) return 'no selected labs';
   if (selectedCount === totalCount) return 'all visible labs';
@@ -446,6 +447,10 @@ function onPlatformFilterChange() {
 
 function getAvailableLabNames() {
   return [...new Set(labRows.map(r => r.lab))].sort((a, b) => a.localeCompare(b));
+}
+
+function getScenarioAvailableLabNames() {
+  return [...new Set(scenarioLabRows.map(r => r.lab))].sort((a, b) => a.localeCompare(b));
 }
 
 function updateLabPickerSummary(availableLabNames = getAvailableLabNames()) {
@@ -603,7 +608,7 @@ function syncScenarioLabPickerSelection(availableLabNames) {
   scenarioSelectedLabNames = new Set(filteredSelected);
 }
 
-function updateScenarioLabPickerSummary(availableLabNames = getAvailableLabNames()) {
+function updateScenarioLabPickerSummary(availableLabNames = getScenarioAvailableLabNames()) {
   const summaryEl = document.getElementById('s-lab-picker-summary');
   if (!summaryEl) return;
   const selectedCount = scenarioSelectedLabNames.size;
@@ -626,7 +631,7 @@ function updateScenarioLabPickerSummary(availableLabNames = getAvailableLabNames
 function renderScenarioLabPickerOptions() {
   const menu = document.getElementById('s-lab-picker-menu');
   if (!menu) return;
-  const availableLabNames = getAvailableLabNames();
+  const availableLabNames = getScenarioAvailableLabNames();
   syncScenarioLabPickerSelection(availableLabNames);
   updateScenarioLabPickerSummary(availableLabNames);
 
@@ -657,7 +662,7 @@ function renderScenarioLabPickerOptions() {
 function getScenarioSelectedRows() {
   if (!scenarioSelectedLabNames.size) return [];
   const selectedSet = new Set(scenarioSelectedLabNames);
-  return labRows.filter(r => selectedSet.has(r.lab));
+  return scenarioLabRows.filter(r => selectedSet.has(r.lab));
 }
 
 function toggleScenarioLabSelection(labName, isSelected) {
@@ -669,7 +674,7 @@ function toggleScenarioLabSelection(labName, isSelected) {
 
 function selectAllScenarioLabs(e) {
   if (e) e.stopPropagation();
-  scenarioSelectedLabNames = new Set(getAvailableLabNames());
+  scenarioSelectedLabNames = new Set(getScenarioAvailableLabNames());
   renderScenarioLabPickerOptions();
   recalc();
 }
@@ -1595,7 +1600,7 @@ function computeScenarioRows(context) {
     scenarioOnsiteTechDays += inScope ? (techDays * onsiteMult) : techDays;
   });
 
-  labRows.forEach(row => {
+  scenarioLabRows.forEach(row => {
     const inScope = isScenarioScopeMatch(row);
     const baseline = getBaselineMetricsForRow(row);
 
@@ -1932,26 +1937,34 @@ function recalc() {
   const hasStdHistoryData = Object.keys(stdHoursByMonth).length > 0;
   const hasHeadcountData = Object.keys(headcountByMonth).length > 0;
 
-  const activeLabs = BASE_LABS
-    .filter(l => getStdHoursForLabWeek(l, currentWeekStart, weekEnd) != null)
+  const scenarioActiveLabs = BASE_LABS
+    .filter(l => getStdHoursForLabWeek(l, currentWeekStart, weekEnd) != null);
+  const dashboardActiveLabs = scenarioActiveLabs
     .filter(l => labMatchesPlatformFilter(l.lab));
-  const activeLabNames = new Set(activeLabs.map(l => l.lab));
-  const activeLabList = [...activeLabNames].sort((a, b) => a.localeCompare(b));
-  syncLabPickerSelection(activeLabList);
-  syncScenarioLabPickerSelection(activeLabList);
-  const techDaysLost = getTechDaysLost(currentWeekStart, activeLabNames);
-  const onsiteRange = getDateRangeForView(currentWeekStart, currentView);
-  const techDaysLostForView = getTechDaysLostInRange(onsiteRange.start, onsiteRange.end, activeLabNames);
-  const onsiteTechDaysForView = Object.values(techDaysLostForView).reduce((s, v) => s + v, 0);
-  const totalOnsiteFTE = onsiteTechDaysForView / daysPerWeek;
 
-  labRows = activeLabs.map(l => {
+  const dashboardActiveLabNames = new Set(dashboardActiveLabs.map(l => l.lab));
+  const scenarioActiveLabNames = new Set(scenarioActiveLabs.map(l => l.lab));
+  const dashboardActiveLabList = [...dashboardActiveLabNames].sort((a, b) => a.localeCompare(b));
+  const scenarioActiveLabList = [...scenarioActiveLabNames].sort((a, b) => a.localeCompare(b));
+  syncLabPickerSelection(dashboardActiveLabList);
+  syncScenarioLabPickerSelection(scenarioActiveLabList);
+
+  const techDaysLostDashboard = getTechDaysLost(currentWeekStart, dashboardActiveLabNames);
+  const techDaysLostScenario = getTechDaysLost(currentWeekStart, scenarioActiveLabNames);
+  const onsiteRange = getDateRangeForView(currentWeekStart, currentView);
+  const techDaysLostForViewDashboard = getTechDaysLostInRange(onsiteRange.start, onsiteRange.end, dashboardActiveLabNames);
+  const techDaysLostForViewScenario = getTechDaysLostInRange(onsiteRange.start, onsiteRange.end, scenarioActiveLabNames);
+  const onsiteTechDaysForViewDashboard = Object.values(techDaysLostForViewDashboard).reduce((s, v) => s + v, 0);
+  const onsiteTechDaysForViewScenario = Object.values(techDaysLostForViewScenario).reduce((s, v) => s + v, 0);
+  const totalOnsiteFTE = onsiteTechDaysForViewDashboard / daysPerWeek;
+
+  const mapLabsToRows = (labs, techDaysLostMap) => labs.map(l => {
     const stdHours = getStdHoursForLabWeek(l, currentWeekStart, weekEnd);
     const baseTech = getHeadcountForLabMonth(l, monthKey);
     const hcMonth = getHeadcountForLabMonth(l, monthKey);
     const hcQuarterSum = quarterKeys.reduce((s, k) => s + getHeadcountForLabMonth(l, k), 0);
     const hcYearSum = yearKeys.reduce((s, k) => s + getHeadcountForLabMonth(l, k), 0);
-    const lost    = techDaysLost[l.lab] || 0;
+    const lost    = techDaysLostMap[l.lab] || 0;
     const lostFTE = lost / daysPerWeek;
     const avail   = Math.max(0, baseTech - lostFTE);
     const wDemand = stdHours;
@@ -2009,15 +2022,18 @@ function recalc() {
     };
   });
 
-  const rowByLab = new Map(labRows.map(r => [r.lab, r]));
+  labRows = mapLabsToRows(dashboardActiveLabs, techDaysLostDashboard);
+  scenarioLabRows = mapLabsToRows(scenarioActiveLabs, techDaysLostScenario);
+
+  const rowByLab = new Map(scenarioLabRows.map(r => [r.lab, r]));
   computeScenarioRows({
     hrsPerDay,
     daysPerWeek,
     weeksPerMo,
     quarterMonthCount: quarterKeys.length,
     yearMonthCount: yearKeys.length,
-    baselineOnsiteFTE: totalOnsiteFTE,
-    techDaysLostForView,
+    baselineOnsiteFTE: onsiteTechDaysForViewScenario / daysPerWeek,
+    techDaysLostForView: techDaysLostForViewScenario,
     rowByLab
   });
 
@@ -2031,8 +2047,8 @@ function recalc() {
     ? (schedulePersistenceEnabled
       ? `No onsite entries stored for ${onsitePeriodLabel}`
       : 'No schedule loaded — using base headcount')
-    : onsiteTechDaysForView > 0
-      ? `${onsiteTechDaysForView.toFixed(0)} tech-days on onsite ${onsitePeriodLabel}`
+    : onsiteTechDaysForViewDashboard > 0
+      ? `${onsiteTechDaysForViewDashboard.toFixed(0)} tech-days on onsite ${onsitePeriodLabel}`
       : `No onsite entries for ${onsitePeriodLabel}`;
   const hcText = hasHeadcountData
     ? `Headcount basis: ${monthKey}${headcountSourceName ? ` · ${headcountSourceName}` : ''}`
