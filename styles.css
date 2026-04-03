@@ -255,27 +255,95 @@
     flex-wrap: wrap;
     align-items: center;
   }
-  .search-wrap { position: relative; flex: 1; min-width: 180px; }
-  .search-icon {
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--muted);
-    font-size: 14px;
-    pointer-events: none;
+  .lab-picker {
+    position: relative;
+    flex: 1;
+    min-width: 240px;
   }
-  .search-input {
+  .lab-picker-btn {
     width: 100%;
-    padding: 8px 10px 8px 32px;
-    font-size: 13px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--white);
     color: var(--text);
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     transition: border-color 0.15s;
   }
-  .search-input:focus { outline: none; border-color: var(--blue); }
+  .lab-picker.open .lab-picker-btn,
+  .lab-picker-btn:hover {
+    border-color: var(--blue);
+  }
+  .lab-picker-caret {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1;
+  }
+  .lab-picker-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    z-index: 30;
+    overflow: hidden;
+  }
+  .lab-picker-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    background: #f8fbff;
+  }
+  .lab-picker-action {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--white);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  .lab-picker-action:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+  .lab-picker-list {
+    max-height: 280px;
+    overflow: auto;
+    padding: 6px 6px 8px;
+  }
+  .lab-picker-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .lab-picker-option:hover {
+    background: var(--light-blue);
+  }
+  .lab-picker-option input {
+    margin: 0;
+  }
+  .lab-picker-empty {
+    padding: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
   .filter-select {
     padding: 8px 10px;
     font-size: 13px;

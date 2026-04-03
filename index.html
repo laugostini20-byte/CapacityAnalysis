@@ -112,9 +112,12 @@
 
   <!-- ── Table Controls ── -->
   <div class="table-controls">
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input class="search-input" type="text" placeholder="Search lab..." id="q" oninput="renderTable()">
+    <div class="lab-picker" id="lab-picker">
+      <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
+        <span id="lab-picker-summary">All labs</span>
+        <span class="lab-picker-caret">▾</span>
+      </button>
+      <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
     </div>
     <select class="filter-select" id="f-status" onchange="renderTable()">
       <option value="all">All statuses</option>

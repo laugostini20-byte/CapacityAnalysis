@@ -70,6 +70,8 @@ let colHelpTipEl = null;
 let currentView = 'weekly';
 let currentThresh = 0.85;
 let showIndysoftLabs = false;
+let selectedLabNames = new Set();
+let labPickerInitialized = false;
 let stdHoursOverrides = {};
 const DEFAULT_STD_HOURS_BY_MONTH = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined'
   ? HARDCODED_STD_HOURS_BY_MONTH
@@ -273,6 +275,124 @@ function toggleIndysoftLabs() {
   showIndysoftLabs = !showIndysoftLabs;
   updatePlatformToggleButton();
   recalc();
+}
+
+function getAvailableLabNames() {
+  return [...new Set(labRows.map(r => r.lab))].sort((a, b) => a.localeCompare(b));
+}
+
+function updateLabPickerSummary(availableLabNames = getAvailableLabNames()) {
+  const summaryEl = document.getElementById('lab-picker-summary');
+  if (!summaryEl) return;
+  const selectedCount = selectedLabNames.size;
+  const totalCount = availableLabNames.length;
+  if (!totalCount) {
+    summaryEl.textContent = 'No labs available';
+    return;
+  }
+  if (selectedCount === 0) {
+    summaryEl.textContent = 'No labs selected';
+    return;
+  }
+  if (selectedCount === totalCount) {
+    summaryEl.textContent = 'All labs';
+    return;
+  }
+  summaryEl.textContent = selectedCount === 1 ? '1 lab selected' : `${selectedCount} labs selected`;
+}
+
+function syncLabPickerSelection(availableLabNames) {
+  const availableSet = new Set(availableLabNames);
+  const filteredSelected = [...selectedLabNames].filter(name => availableSet.has(name));
+  if (!labPickerInitialized) {
+    selectedLabNames = new Set(availableLabNames);
+    labPickerInitialized = true;
+    return;
+  }
+  if (selectedLabNames.size > 0 && filteredSelected.length === 0 && availableLabNames.length) {
+    selectedLabNames = new Set(availableLabNames);
+    return;
+  }
+  selectedLabNames = new Set(filteredSelected);
+}
+
+function renderLabPickerOptions() {
+  const menu = document.getElementById('lab-picker-menu');
+  if (!menu) return;
+  const availableLabNames = getAvailableLabNames();
+  syncLabPickerSelection(availableLabNames);
+  updateLabPickerSummary(availableLabNames);
+
+  if (!availableLabNames.length) {
+    menu.innerHTML = '<div class="lab-picker-empty">No labs available for this view.</div>';
+    return;
+  }
+
+  const optionsHtml = availableLabNames
+    .map(name => `<label class="lab-picker-option"><input type="checkbox" value="${escapeHtml(name)}" onchange="toggleLabSelection(this.value, this.checked)" ${selectedLabNames.has(name) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`)
+    .join('');
+
+  menu.innerHTML = `
+    <div class="lab-picker-actions">
+      <button type="button" class="lab-picker-action" onclick="selectAllLabs()">Select all</button>
+      <button type="button" class="lab-picker-action" onclick="clearLabSelection()">Clear</button>
+    </div>
+    <div class="lab-picker-list">${optionsHtml}</div>
+  `;
+}
+
+function getSelectedRows() {
+  if (!selectedLabNames.size) return [];
+  const selectedSet = new Set(selectedLabNames);
+  return labRows.filter(r => selectedSet.has(r.lab));
+}
+
+function toggleLabSelection(labName, isSelected) {
+  if (isSelected) selectedLabNames.add(labName);
+  else selectedLabNames.delete(labName);
+  updateLabPickerSummary();
+  renderTable();
+}
+
+function selectAllLabs() {
+  selectedLabNames = new Set(getAvailableLabNames());
+  renderLabPickerOptions();
+  renderTable();
+}
+
+function clearLabSelection() {
+  selectedLabNames.clear();
+  renderLabPickerOptions();
+  renderTable();
+}
+
+function toggleLabPickerMenu(e) {
+  if (e) e.stopPropagation();
+  const picker = document.getElementById('lab-picker');
+  const menu = document.getElementById('lab-picker-menu');
+  if (!picker || !menu) return;
+  const isHidden = menu.hasAttribute('hidden');
+  if (isHidden) {
+    menu.removeAttribute('hidden');
+    picker.classList.add('open');
+  } else {
+    menu.setAttribute('hidden', '');
+    picker.classList.remove('open');
+  }
+}
+
+function closeLabPickerMenu() {
+  const picker = document.getElementById('lab-picker');
+  const menu = document.getElementById('lab-picker-menu');
+  if (!picker || !menu) return;
+  menu.setAttribute('hidden', '');
+  picker.classList.remove('open');
+}
+
+function handleDocumentClickForLabPicker(e) {
+  const picker = document.getElementById('lab-picker');
+  if (!picker) return;
+  if (!picker.contains(e.target)) closeLabPickerMenu();
 }
 
 function resolveLabName(raw) {
@@ -864,10 +984,11 @@ function updateViewDecor() {
 }
 
 function updateStatusSummary() {
-  const over = labRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'over').length;
-  const risk = labRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'risk').length;
-  const ok = labRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'ok').length;
-  document.getElementById('m-total').textContent = labRows.length;
+  const selectedRows = getSelectedRows();
+  const over = selectedRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'over').length;
+  const risk = selectedRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'risk').length;
+  const ok = selectedRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'ok').length;
+  document.getElementById('m-total').textContent = selectedRows.length;
   document.getElementById('m-over').textContent = over;
   document.getElementById('m-risk').textContent = risk;
   document.getElementById('m-ok').textContent = ok;
@@ -877,7 +998,6 @@ function setView(view) {
   if (!VIEW_META[view]) return;
   currentView = view;
   updateViewDecor();
-  updateStatusSummary();
   renderTable();
 }
 
@@ -1178,16 +1298,15 @@ function recalc() {
   document.getElementById('week-sub').textContent = `${onsiteText} · ${hcText} · ${stdText} · ${stdUploadText}`;
 
   updateViewDecor();
-  updateStatusSummary();
+  renderLabPickerOptions();
   renderTable();
 }
 
 function renderTable() {
-  const q  = (document.getElementById('q').value || '').trim().toLowerCase();
   const fs = document.getElementById('f-status').value;
 
-  let rows = [...labRows];
-  if (q)  rows = rows.filter(r => r.lab.toLowerCase().includes(q));
+  let rows = getSelectedRows();
+  updateStatusSummary();
   if (fs !== 'all') rows = rows.filter(r => getStatusFromUtil(getUtilForView(r)) === fs);
 
   const statusOrder = {over:0, risk:1, ok:2};
@@ -1218,7 +1337,7 @@ function renderTable() {
       <div class="empty-state">
         <div class="empty-icon">🔍</div>
         <div class="empty-title">No labs match your filters</div>
-        <div class="empty-sub">Try clearing the search or changing the status filter</div>
+        <div class="empty-sub">Try adjusting lab selection or status filter</div>
       </div></td></tr>`;
     return;
   }
@@ -1269,6 +1388,10 @@ function renderTable() {
 async function initApp() {
   initStdUploadModal();
   initColumnHelpTooltips();
+  document.addEventListener('click', handleDocumentClickForLabPicker);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeLabPickerMenu();
+  });
   updatePlatformToggleButton();
   setSort('status');
   recalc();
