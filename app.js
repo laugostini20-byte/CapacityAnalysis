@@ -91,10 +91,10 @@ const defaultScenarioModel = () => ({
   enabled: false,
   scopeType: 'selection',
   scopePlatform: 'caltrak',
-  onsitePct: 0,
+  onsiteTechDelta: 0,
   productivityPct: 0,
   headcountDelta: 0,
-  demandPct: 0,
+  stdHoursDelta: 0,
   selectedLabs: [],
   view: 'weekly',
   statusFilter: 'all'
@@ -321,10 +321,10 @@ function normalizeScenarioConfig(raw) {
     enabled: Boolean(src.enabled),
     scopeType: ['all', 'platform', 'selection'].includes(scopeType) ? scopeType : 'selection',
     scopePlatform: ['caltrak', 'indysoft'].includes(scopePlatform) ? scopePlatform : 'caltrak',
-    onsitePct: toNum(src.onsitePct, 0),
+    onsiteTechDelta: toNum(src.onsiteTechDelta, toNum(src.onsitePct, 0)),
     productivityPct: toNum(src.productivityPct, 0),
     headcountDelta: toNum(src.headcountDelta, 0),
-    demandPct: toNum(src.demandPct, 0),
+    stdHoursDelta: toNum(src.stdHoursDelta, toNum(src.demandPct, 0)),
     selectedLabs,
     view: ['weekly', 'monthly', 'quarterly', 'yearly'].includes(view) ? view : 'weekly',
     statusFilter: ['all', 'over', 'risk', 'ok'].includes(statusFilter) ? statusFilter : 'all'
@@ -370,10 +370,10 @@ function updateScenarioSnapshot() {
   snapshotEl.classList.add('is-active');
   snapshotEl.textContent =
     `Scenario "${scenarioName}" prepared for ${getScenarioScopeLabel()} · ` +
-    `Onsite ${fmtSigned(scenarioModel.onsitePct, '%')} · ` +
+    `Onsite techs ${fmtSigned(scenarioModel.onsiteTechDelta)} · ` +
     `Productivity ${fmtSigned(scenarioModel.productivityPct, '%')} · ` +
     `Headcount ${fmtSigned(scenarioModel.headcountDelta)} · ` +
-    `Demand ${fmtSigned(scenarioModel.demandPct, '%')} · Dashboard remains baseline`;
+    `Std hrs ${fmtSigned(scenarioModel.stdHoursDelta)} · Dashboard remains baseline`;
 }
 
 function updateScenarioControls() {
@@ -381,10 +381,10 @@ function updateScenarioControls() {
   const nameEl = document.getElementById('s-name');
   const scopeTypeEl = document.getElementById('s-scope-type');
   const scopePlatformEl = document.getElementById('s-scope-platform');
-  const onsiteEl = document.getElementById('s-onsite-pct');
+  const onsiteEl = document.getElementById('s-onsite-tech-delta');
   const prodEl = document.getElementById('s-prod-pct');
   const hcEl = document.getElementById('s-headcount-delta');
-  const demandEl = document.getElementById('s-demand-pct');
+  const demandEl = document.getElementById('s-std-hours-delta');
   const statusFilterEl = document.getElementById('s-f-status');
   const scopePlatformWrap = document.getElementById('s-scope-platform-wrap');
   const noteEl = document.getElementById('scenario-note');
@@ -394,10 +394,10 @@ function updateScenarioControls() {
   if (nameEl) nameEl.value = scenarioModel.name || '';
   if (scopeTypeEl) scopeTypeEl.value = scenarioModel.scopeType || 'selection';
   if (scopePlatformEl) scopePlatformEl.value = scenarioModel.scopePlatform || 'caltrak';
-  if (onsiteEl) onsiteEl.value = String(scenarioModel.onsitePct ?? 0);
+  if (onsiteEl) onsiteEl.value = String(scenarioModel.onsiteTechDelta ?? 0);
   if (prodEl) prodEl.value = String(scenarioModel.productivityPct ?? 0);
   if (hcEl) hcEl.value = String(scenarioModel.headcountDelta ?? 0);
-  if (demandEl) demandEl.value = String(scenarioModel.demandPct ?? 0);
+  if (demandEl) demandEl.value = String(scenarioModel.stdHoursDelta ?? 0);
   if (statusFilterEl) statusFilterEl.value = scenarioModel.statusFilter || 'all';
   if (profileEl) profileEl.value = scenarioModel.id != null ? String(scenarioModel.id) : '';
   if (scopePlatformWrap && scopeTypeEl) scopePlatformWrap.style.display = (scopeTypeEl.value === 'platform') ? '' : 'none';
@@ -416,20 +416,20 @@ function setScenarioModelFromControls({recalcNow = true} = {}) {
   const nameEl = document.getElementById('s-name');
   const scopeTypeEl = document.getElementById('s-scope-type');
   const scopePlatformEl = document.getElementById('s-scope-platform');
-  const onsiteEl = document.getElementById('s-onsite-pct');
+  const onsiteEl = document.getElementById('s-onsite-tech-delta');
   const prodEl = document.getElementById('s-prod-pct');
   const hcEl = document.getElementById('s-headcount-delta');
-  const demandEl = document.getElementById('s-demand-pct');
+  const demandEl = document.getElementById('s-std-hours-delta');
 
   const statusFilterEl = document.getElementById('s-f-status');
   const parsed = normalizeScenarioConfig({
     enabled: true,
     scopeType: 'selection',
     scopePlatform: 'caltrak',
-    onsitePct: onsiteEl ? onsiteEl.value : 0,
+    onsiteTechDelta: onsiteEl ? onsiteEl.value : 0,
     productivityPct: prodEl ? prodEl.value : 0,
     headcountDelta: hcEl ? hcEl.value : 0,
-    demandPct: demandEl ? demandEl.value : 0,
+    stdHoursDelta: demandEl ? demandEl.value : 0,
     selectedLabs: [...scenarioSelectedLabNames],
     view: currentView,
     statusFilter: statusFilterEl ? statusFilterEl.value : (scenarioModel.statusFilter || 'all')
@@ -1699,9 +1699,9 @@ function computeScenarioRows(context) {
   scenarioAggregate = null;
   if (!scenarioModel.enabled) return;
 
-  const onsiteMult = 1 + (scenarioModel.onsitePct / 100);
+  const onsiteTechDelta = scenarioModel.onsiteTechDelta;
   const prodMult = 1 + (scenarioModel.productivityPct / 100);
-  const demandMult = 1 + (scenarioModel.demandPct / 100);
+  const stdHoursDelta = scenarioModel.stdHoursDelta;
   const hcDelta = scenarioModel.headcountDelta;
   const effectiveHrsPerDay = context.hrsPerDay * prodMult;
   const monthCapPerFte = effectiveHrsPerDay * context.daysPerWeek * context.weeksPerMo;
@@ -1710,7 +1710,8 @@ function computeScenarioRows(context) {
   Object.entries(context.techDaysLostForView).forEach(([labName, techDays]) => {
     const row = context.rowByLab.get(labName);
     const inScope = row ? isScenarioScopeMatch(row) : false;
-    scenarioOnsiteTechDays += inScope ? (techDays * onsiteMult) : techDays;
+    const deltaTechDays = onsiteTechDelta * context.viewWorkdays;
+    scenarioOnsiteTechDays += inScope ? Math.max(0, techDays + deltaTechDays) : techDays;
   });
 
   scenarioLabRows.forEach(row => {
@@ -1723,9 +1724,9 @@ function computeScenarioRows(context) {
     }
 
     const scenarioBaseTech = Math.max(0, row.baseTech + hcDelta);
-    const scenarioLostFTE = Math.max(0, row.lostFTE * onsiteMult);
+    const scenarioLostFTE = Math.max(0, row.lostFTE + onsiteTechDelta);
     const scenarioAvail = Math.max(0, scenarioBaseTech - scenarioLostFTE);
-    const scenarioDemand = Math.max(0, baseline.demand * demandMult);
+    const scenarioDemand = Math.max(0, baseline.demand + stdHoursDelta);
 
     const scenarioWCap = scenarioAvail * effectiveHrsPerDay * context.daysPerWeek;
     const scenarioMCap = Math.max(0, row.hcMonth + hcDelta) * monthCapPerFte;
@@ -2167,6 +2168,7 @@ function recalc() {
     quarterMonthCount: quarterKeys.length,
     yearMonthCount: yearKeys.length,
     baselineOnsiteFTE: onsiteTechDaysForViewScenario / daysPerWeek,
+    viewWorkdays: workdaysInRange(onsiteRange.start, onsiteRange.end, onsiteRange.start, onsiteRange.end),
     techDaysLostForView: techDaysLostForViewScenario,
     rowByLab
   });

@@ -210,8 +210,8 @@
 
           <div class="scenario-grid">
             <div class="param">
-              <label>Onsite % change</label>
-              <input type="number" id="s-onsite-pct" value="0" step="1" oninput="onScenarioControlChange()">
+              <label>Onsite tech delta</label>
+              <input type="number" id="s-onsite-tech-delta" value="0" step="1" oninput="onScenarioControlChange()">
             </div>
             <div class="param">
               <label>Productivity % change</label>
@@ -222,8 +222,8 @@
               <input type="number" id="s-headcount-delta" value="0" step="1" oninput="onScenarioControlChange()">
             </div>
             <div class="param">
-              <label>Demand % change</label>
-              <input type="number" id="s-demand-pct" value="0" step="1" oninput="onScenarioControlChange()">
+              <label>Std hours delta</label>
+              <input type="number" id="s-std-hours-delta" value="0" step="1" oninput="onScenarioControlChange()">
             </div>
           </div>
           <div class="scenario-note" id="scenario-note">Scenario adjustments apply to selected labs in this tab. Baseline data is unchanged.</div>
@@ -246,6 +246,12 @@
           <option value="risk">At risk</option>
           <option value="ok">Healthy</option>
         </select>
+        <div class="view-toggle" role="group" aria-label="Scenario capacity views">
+          <button type="button" class="view-btn" data-view="weekly" onclick="setView('weekly')">Weekly</button>
+          <button type="button" class="view-btn" data-view="monthly" onclick="setView('monthly')">Monthly</button>
+          <button type="button" class="view-btn" data-view="quarterly" onclick="setView('quarterly')">Quarterly</button>
+          <button type="button" class="view-btn" data-view="yearly" onclick="setView('yearly')">Yearly</button>
+        </div>
         <div class="row-count" id="s-row-count">— labs</div>
       </div>
 
