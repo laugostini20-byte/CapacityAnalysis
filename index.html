@@ -39,18 +39,24 @@
           </div>
           <button class="week-nav-btn" onclick="shiftWeek(1)" title="Next week">&#8594;</button>
         </div>
-        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('f-sched').click()">
-          <input type="file" id="f-sched" accept=".csv,.xlsx,.xls" onchange="loadSchedule(event)">
-          <div class="drop-icon">📅</div>
-          <div class="drop-text"><strong>Upload onsite schedule</strong><br>CSV or Excel · Columns: Lab, Start Time, End Time, Number of Tech</div>
+        <div class="upload-grid">
+          <div class="upload-panel">
+            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('f-sched').click()">
+              <input type="file" id="f-sched" accept=".csv,.xlsx,.xls" onchange="loadSchedule(event)">
+              <div class="drop-icon">📅</div>
+              <div class="drop-text"><strong>Upload onsite schedule</strong><br>CSV or Excel · Columns: Lab, Start Time, End Time, Number of Tech</div>
+            </div>
+            <div id="st-sched"></div>
+          </div>
+          <div class="upload-panel">
+            <div class="drop-zone drop-zone-std" onclick="document.getElementById('f-std').click()">
+              <input type="file" id="f-std" accept=".csv,.xlsx,.xls" onchange="loadStdHours(event)">
+              <div class="drop-icon">📈</div>
+              <div class="drop-text"><strong>Upload standard hours</strong><br>CSV or Excel · Columns: Lab, Current Std Hours · Date range popup on upload</div>
+            </div>
+            <div id="st-std"></div>
+          </div>
         </div>
-        <div id="st-sched"></div>
-        <div class="drop-zone drop-zone-std" onclick="document.getElementById('f-std').click()">
-          <input type="file" id="f-std" accept=".csv,.xlsx,.xls" onchange="loadStdHours(event)">
-          <div class="drop-icon">📈</div>
-          <div class="drop-text"><strong>Upload standard hours</strong><br>CSV or Excel · Columns: Lab, Current Std Hours · Date range popup on upload</div>
-        </div>
-        <div id="st-std"></div>
       </div>
     </div>
 

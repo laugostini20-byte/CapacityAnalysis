@@ -110,6 +110,7 @@
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
     margin-bottom: 1rem;
+    align-items: start;
   }
 
   /* ── Week Nav ── */
@@ -149,11 +150,19 @@
     transition: border-color 0.15s, background 0.15s;
     position: relative;
   }
+  .upload-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .upload-panel {
+    min-width: 0;
+  }
   .drop-zone:hover, .drop-zone.drag-over {
     border-color: var(--blue);
     background: var(--light-blue);
   }
-  .drop-zone-std { margin-top: 10px; }
+  .drop-zone-std { margin-top: 0; }
   .drop-zone input { display: none; }
   .drop-icon { font-size: 20px; margin-bottom: 4px; }
   .drop-text { font-size: 13px; color: var(--muted); }
@@ -684,6 +693,7 @@
   /* ── Responsive ── */
   @media (max-width: 900px) {
     .top-grid { grid-template-columns: 1fr; }
+    .upload-grid { grid-template-columns: 1fr; }
     .summary-grid { grid-template-columns: repeat(3, 1fr); }
     .params-grid { grid-template-columns: repeat(2, 1fr); }
     .page { padding: 1rem 1rem 3rem; }
