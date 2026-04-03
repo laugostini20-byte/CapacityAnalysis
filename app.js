@@ -1676,10 +1676,6 @@ function updateViewDecor() {
     scenarioDemandEl.textContent = meta.demandHeader;
     scenarioDemandEl.setAttribute('data-help', meta.demandHelp);
   }
-  if (scenarioHistoricalDemandEl) {
-    scenarioHistoricalDemandEl.textContent = meta.historicalDemandHeader;
-    scenarioHistoricalDemandEl.setAttribute('data-help', meta.historicalDemandHelp);
-  }
   if (scenarioCapEl) {
     scenarioCapEl.textContent = meta.capHeader;
     scenarioCapEl.setAttribute('data-help', meta.capHelp);
@@ -2316,7 +2312,7 @@ function buildTableRowsHtml(rows, {useScenario = false} = {}) {
       <td class="num">${lostDisp}${onsiteSub}</td>
       <td class="num">${availDisp}${availSub}</td>
       <td class="num">${fmtHrs(demand)}${demandSub}</td>
-      <td class="num">${fmtHrs(historicalDemand)}</td>
+      ${!useScenario ? `<td class="num">${fmtHrs(historicalDemand)}</td>` : ''}
       <td class="num">${fmtHrs(cap)}${capSub}</td>
       <td class="num ${gapCls}">${gapStr}${gapSub}</td>
       <td class="util-cell">${utilPct != null ? `
