@@ -23,211 +23,250 @@
 </nav>
 
 <main class="page">
+  <div class="page-tab-nav" role="tablist" aria-label="Capacity pages">
+    <button
+      type="button"
+      class="page-tab-btn active"
+      data-page-tab="overview"
+      role="tab"
+      aria-selected="true"
+      onclick="setPageTab('overview')">Dashboard</button>
+    <button
+      type="button"
+      class="page-tab-btn"
+      data-page-tab="scenario"
+      role="tab"
+      aria-selected="false"
+      onclick="setPageTab('scenario')">Scenario Analysis</button>
+  </div>
 
-  <!-- ── Top Controls ── -->
-  <div class="top-grid">
+  <section class="page-tab-pane active" data-page-tab="overview" id="pane-overview">
+    <!-- ── Top Controls ── -->
+    <div class="top-grid">
 
-    <!-- Week + Upload -->
-    <div class="card">
-      <div class="card-body">
-        <div class="card-title">Week in view</div>
-        <div class="week-nav">
-          <button class="week-nav-btn" onclick="shiftWeek(-1)" title="Previous week">&#8592;</button>
-          <div class="week-center">
-            <div class="week-label" id="week-label">—</div>
-            <div class="week-sub" id="week-sub">—</div>
-          </div>
-          <button class="week-nav-btn" onclick="shiftWeek(1)" title="Next week">&#8594;</button>
-        </div>
-        <div class="upload-grid">
-          <div class="upload-panel">
-            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('f-sched').click()">
-              <input type="file" id="f-sched" accept=".csv,.xlsx,.xls" onchange="loadSchedule(event)">
-              <div class="drop-icon">📅</div>
-              <div class="drop-text"><strong>Upload onsite schedule</strong><br>CSV or Excel · Columns: Lab, Start Time, End Time, Number of Tech</div>
+      <!-- Week + Upload -->
+      <div class="card">
+        <div class="card-body">
+          <div class="card-title">Week in view</div>
+          <div class="week-nav">
+            <button class="week-nav-btn" onclick="shiftWeek(-1)" title="Previous week">&#8592;</button>
+            <div class="week-center">
+              <div class="week-label" id="week-label">—</div>
+              <div class="week-sub" id="week-sub">—</div>
             </div>
-            <div id="st-sched"></div>
+            <button class="week-nav-btn" onclick="shiftWeek(1)" title="Next week">&#8594;</button>
           </div>
-          <div class="upload-panel">
-            <div class="drop-zone drop-zone-std" onclick="document.getElementById('f-std').click()">
-              <input type="file" id="f-std" accept=".csv,.xlsx,.xls" onchange="loadStdHours(event)">
-              <div class="drop-icon">📈</div>
-              <div class="drop-text"><strong>Upload standard hours</strong><br>CSV or Excel · Columns: Lab, Current Std Hours · Date range popup on upload</div>
+          <div class="upload-grid">
+            <div class="upload-panel">
+              <div class="drop-zone" id="drop-zone" onclick="document.getElementById('f-sched').click()">
+                <input type="file" id="f-sched" accept=".csv,.xlsx,.xls" onchange="loadSchedule(event)">
+                <div class="drop-icon">📅</div>
+                <div class="drop-text"><strong>Upload onsite schedule</strong><br>CSV or Excel · Columns: Lab, Start Time, End Time, Number of Tech</div>
+              </div>
+              <div id="st-sched"></div>
             </div>
-            <div id="st-std"></div>
+            <div class="upload-panel">
+              <div class="drop-zone drop-zone-std" onclick="document.getElementById('f-std').click()">
+                <input type="file" id="f-std" accept=".csv,.xlsx,.xls" onchange="loadStdHours(event)">
+                <div class="drop-icon">📈</div>
+                <div class="drop-text"><strong>Upload standard hours</strong><br>CSV or Excel · Columns: Lab, Current Std Hours · Date range popup on upload</div>
+              </div>
+              <div id="st-std"></div>
+            </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Assumptions -->
+      <div class="card">
+        <div class="card-body">
+          <div class="card-title">Capacity assumptions</div>
+          <div class="params-grid">
+            <div class="param">
+              <label>Productive hrs/day</label>
+              <input type="number" id="p-hrs" value="5.6" step="0.1" min="1" max="12">
+            </div>
+            <div class="param">
+              <label>Days/week</label>
+              <input type="number" id="p-days" value="5" step="1" min="1" max="7">
+            </div>
+            <div class="param">
+              <label>Weeks/month</label>
+              <input type="number" id="p-weeks" value="4.33" step="0.01" min="1" max="5">
+            </div>
+            <div class="param">
+              <label>At-risk threshold %</label>
+              <input type="number" id="p-thresh" value="85" step="5" min="50" max="100">
+            </div>
+          </div>
+          <button class="recalc-btn" onclick="recalc()">↻ Recalculate</button>
         </div>
       </div>
     </div>
 
-    <!-- Assumptions -->
-    <div class="card">
-      <div class="card-body">
-        <div class="card-title">Capacity assumptions</div>
-        <div class="params-grid">
-          <div class="param">
-            <label>Productive hrs/day</label>
-            <input type="number" id="p-hrs" value="5.6" step="0.1" min="1" max="12">
-          </div>
-          <div class="param">
-            <label>Days/week</label>
-            <input type="number" id="p-days" value="5" step="1" min="1" max="7">
-          </div>
-          <div class="param">
-            <label>Weeks/month</label>
-            <input type="number" id="p-weeks" value="4.33" step="0.01" min="1" max="5">
-          </div>
-          <div class="param">
-            <label>At-risk threshold %</label>
-            <input type="number" id="p-thresh" value="85" step="5" min="50" max="100">
-          </div>
+    <div class="card scenario-launch-card">
+      <div class="card-body scenario-launch-body">
+        <div>
+          <div class="card-title">Scenario Analysis</div>
+          <div class="scenario-launch-text" id="scenario-snapshot">Scenario mode is off. Use the Scenario Analysis tab to run what-if tests.</div>
         </div>
-        <button class="recalc-btn" onclick="recalc()">↻ Recalculate</button>
+        <button type="button" class="scenario-btn" onclick="setPageTab('scenario')">Open Scenario Tab</button>
       </div>
     </div>
 
-    <!-- Scenario Lab -->
-    <div class="card scenario-card">
-      <div class="card-body">
-        <div class="card-title">Scenario Lab</div>
-        <div class="scenario-toolbar">
-          <label class="scenario-toggle">
-            <input type="checkbox" id="s-enabled" onchange="onScenarioControlChange()">
-            <span>Enable scenario</span>
-          </label>
-          <input class="scenario-name" type="text" id="s-name" placeholder="Scenario name (example: Q2 onsite spike)" oninput="onScenarioControlChange(false)">
-          <select class="filter-select" id="s-profile" onchange="onScenarioProfileSelect()">
-            <option value="">Saved scenarios</option>
-          </select>
-          <button type="button" class="scenario-btn" onclick="saveScenarioProfile()">Save</button>
-          <button type="button" class="scenario-btn scenario-btn-light" onclick="deleteScenarioProfile()">Delete</button>
-        </div>
+    <!-- ── Summary Metrics ── -->
+    <div class="summary-grid">
+      <div class="metric blue-accent">
+        <div class="metric-label">Labs tracked</div>
+        <div class="metric-value blue" id="m-total">19</div>
+        <div class="metric-sub">with std hours data</div>
+      </div>
+      <div class="metric blue-accent">
+        <div class="metric-label">Techs on onsite</div>
+        <div class="metric-value blue" id="m-onsite">—</div>
+        <div class="metric-sub" id="m-onsite-sub">FTE equivalent this week</div>
+      </div>
+      <div class="metric red">
+        <div class="metric-label">Over capacity</div>
+        <div class="metric-value red" id="m-over">—</div>
+        <div class="metric-sub">demand exceeds supply</div>
+      </div>
+      <div class="metric amber">
+        <div class="metric-label">At risk</div>
+        <div class="metric-value amber" id="m-risk">—</div>
+        <div class="metric-sub">above threshold</div>
+      </div>
+      <div class="metric green">
+        <div class="metric-label">Healthy</div>
+        <div class="metric-value green" id="m-ok">—</div>
+        <div class="metric-sub">within capacity</div>
+      </div>
+    </div>
 
-        <div class="scenario-grid">
-          <div class="param">
-            <label>Scope</label>
-            <select id="s-scope-type" onchange="onScenarioControlChange()">
-              <option value="all">All labs</option>
-              <option value="platform">Platform</option>
-              <option value="selection">Selected labs</option>
+    <!-- ── Table Controls ── -->
+    <div class="table-controls">
+      <div class="lab-picker" id="lab-picker">
+        <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
+          <span id="lab-picker-summary">All labs</span>
+          <span class="lab-picker-caret">▾</span>
+        </button>
+        <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
+      </div>
+      <select class="filter-select" id="f-status" onchange="renderTable()">
+        <option value="all">All statuses</option>
+        <option value="over">Over capacity</option>
+        <option value="risk">At risk</option>
+        <option value="ok">Healthy</option>
+      </select>
+      <select class="filter-select" id="f-sort" onchange="onSortSelect()">
+        <option value="status">Sort: Status</option>
+        <option value="headcount">Sort: Headcount</option>
+        <option value="util">Sort: Utilization</option>
+        <option value="name">Sort: Lab Name</option>
+      </select>
+      <select class="filter-select" id="f-platform" onchange="onPlatformFilterChange()">
+        <option value="caltrak" selected>Platform: CalTrak</option>
+        <option value="indysoft">Platform: Indysoft</option>
+        <option value="all">Platform: All</option>
+      </select>
+      <div class="view-toggle" role="group" aria-label="Capacity views">
+        <button type="button" class="view-btn" data-view="weekly" onclick="setView('weekly')">Weekly</button>
+        <button type="button" class="view-btn" data-view="monthly" onclick="setView('monthly')">Monthly</button>
+        <button type="button" class="view-btn" data-view="quarterly" onclick="setView('quarterly')">Quarterly</button>
+        <button type="button" class="view-btn" data-view="yearly" onclick="setView('yearly')">Yearly</button>
+      </div>
+      <div class="row-count" id="row-count">— labs</div>
+    </div>
+
+    <!-- ── Table ── -->
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:22%" data-sort="name" data-help="Lab location or business unit name." onclick="setSort('name')">Lab <span class="sort-arrow" id="arr-name"></span></th>
+              <th style="width:8%" class="num" data-sort="headcount" data-help="Starting technician headcount for the selected month before onsite deductions." onclick="setSort('headcount')">Base techs <span class="sort-arrow" id="arr-headcount"></span></th>
+              <th style="width:9%" class="num" data-sort="onsite" data-help="FTEs assigned to onsite work this week (derived from uploaded schedule)." onclick="setSort('onsite')">On onsite <span class="sort-arrow" id="arr-onsite"></span></th>
+              <th style="width:9%" class="num" data-help="Technicians available for lab work after onsite assignments (Base techs minus On onsite).">Avail</th>
+              <th style="width:9%" class="num" id="hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
+              <th style="width:10%" class="num" id="hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
+              <th style="width:10%" class="num" id="hdr-gap" data-sort="gap" data-help="Weekly cap minus Std hrs; negative means shortfall." onclick="setSort('gap')">Weekly gap <span class="sort-arrow" id="arr-gap"></span></th>
+              <th style="width:13%" class="num" data-sort="util" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity." onclick="setSort('util')">Utilization <span class="sort-arrow" id="arr-util"></span></th>
+              <th style="width:10%" class="num" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="page-tab-pane" data-page-tab="scenario" id="pane-scenario" hidden>
+    <div class="scenario-tab-grid">
+      <div class="card scenario-card">
+        <div class="card-body">
+          <div class="card-title">Scenario Lab</div>
+          <div class="scenario-toolbar">
+            <label class="scenario-toggle">
+              <input type="checkbox" id="s-enabled" onchange="onScenarioControlChange()">
+              <span>Enable scenario</span>
+            </label>
+            <input class="scenario-name" type="text" id="s-name" placeholder="Scenario name (example: Q2 onsite spike)" oninput="onScenarioControlChange(false)">
+            <select class="filter-select" id="s-profile" onchange="onScenarioProfileSelect()">
+              <option value="">Saved scenarios</option>
             </select>
+            <button type="button" class="scenario-btn" onclick="saveScenarioProfile()">Save</button>
+            <button type="button" class="scenario-btn scenario-btn-light" onclick="deleteScenarioProfile()">Delete</button>
           </div>
-          <div class="param" id="s-scope-platform-wrap">
-            <label>Platform</label>
-            <select id="s-scope-platform" onchange="onScenarioControlChange()">
-              <option value="caltrak">CalTrak</option>
-              <option value="indysoft">Indysoft</option>
-            </select>
+
+          <div class="scenario-grid">
+            <div class="param">
+              <label>Scope</label>
+              <select id="s-scope-type" onchange="onScenarioControlChange()">
+                <option value="all">All labs</option>
+                <option value="platform">Platform</option>
+                <option value="selection">Selected labs</option>
+              </select>
+            </div>
+            <div class="param" id="s-scope-platform-wrap">
+              <label>Platform</label>
+              <select id="s-scope-platform" onchange="onScenarioControlChange()">
+                <option value="caltrak">CalTrak</option>
+                <option value="indysoft">Indysoft</option>
+              </select>
+            </div>
+            <div class="param">
+              <label>Onsite % change</label>
+              <input type="number" id="s-onsite-pct" value="0" step="1" oninput="onScenarioControlChange()">
+            </div>
+            <div class="param">
+              <label>Productivity % change</label>
+              <input type="number" id="s-prod-pct" value="0" step="1" oninput="onScenarioControlChange()">
+            </div>
+            <div class="param">
+              <label>Headcount delta (techs)</label>
+              <input type="number" id="s-headcount-delta" value="0" step="1" oninput="onScenarioControlChange()">
+            </div>
+            <div class="param">
+              <label>Demand % change</label>
+              <input type="number" id="s-demand-pct" value="0" step="1" oninput="onScenarioControlChange()">
+            </div>
           </div>
-          <div class="param">
-            <label>Onsite % change</label>
-            <input type="number" id="s-onsite-pct" value="0" step="1" oninput="onScenarioControlChange()">
-          </div>
-          <div class="param">
-            <label>Productivity % change</label>
-            <input type="number" id="s-prod-pct" value="0" step="1" oninput="onScenarioControlChange()">
-          </div>
-          <div class="param">
-            <label>Headcount delta (techs)</label>
-            <input type="number" id="s-headcount-delta" value="0" step="1" oninput="onScenarioControlChange()">
-          </div>
-          <div class="param">
-            <label>Demand % change</label>
-            <input type="number" id="s-demand-pct" value="0" step="1" oninput="onScenarioControlChange()">
-          </div>
+          <div class="scenario-note" id="scenario-note">Scenario mode is off. Enable it to run what-if tests without changing baseline data.</div>
         </div>
-        <div class="scenario-note" id="scenario-note">Scenario mode is off. Enable it to run what-if tests without changing baseline data.</div>
+      </div>
+
+      <div class="scenario-impact" id="scenario-impact" hidden>Scenario impact will appear here.</div>
+
+      <div class="card">
+        <div class="card-body">
+          <div class="card-title">Review Results</div>
+          <div class="scenario-tab-text">Scenario changes flow into dashboard metrics and the lab table in real time. Return to Dashboard to review row-level impacts.</div>
+          <button type="button" class="scenario-btn scenario-btn-light" onclick="setPageTab('overview')">Back to Dashboard</button>
+        </div>
       </div>
     </div>
-  </div>
-
-  <!-- ── Summary Metrics ── -->
-  <div class="summary-grid">
-    <div class="metric blue-accent">
-      <div class="metric-label">Labs tracked</div>
-      <div class="metric-value blue" id="m-total">19</div>
-      <div class="metric-sub">with std hours data</div>
-    </div>
-    <div class="metric blue-accent">
-      <div class="metric-label">Techs on onsite</div>
-      <div class="metric-value blue" id="m-onsite">—</div>
-      <div class="metric-sub" id="m-onsite-sub">FTE equivalent this week</div>
-    </div>
-    <div class="metric red">
-      <div class="metric-label">Over capacity</div>
-      <div class="metric-value red" id="m-over">—</div>
-      <div class="metric-sub">demand exceeds supply</div>
-    </div>
-    <div class="metric amber">
-      <div class="metric-label">At risk</div>
-      <div class="metric-value amber" id="m-risk">—</div>
-      <div class="metric-sub">above threshold</div>
-    </div>
-    <div class="metric green">
-      <div class="metric-label">Healthy</div>
-      <div class="metric-value green" id="m-ok">—</div>
-      <div class="metric-sub">within capacity</div>
-    </div>
-  </div>
-
-  <div class="scenario-impact" id="scenario-impact" hidden>Scenario impact will appear here.</div>
-
-  <!-- ── Table Controls ── -->
-  <div class="table-controls">
-    <div class="lab-picker" id="lab-picker">
-      <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
-        <span id="lab-picker-summary">All labs</span>
-        <span class="lab-picker-caret">▾</span>
-      </button>
-      <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
-    </div>
-    <select class="filter-select" id="f-status" onchange="renderTable()">
-      <option value="all">All statuses</option>
-      <option value="over">Over capacity</option>
-      <option value="risk">At risk</option>
-      <option value="ok">Healthy</option>
-    </select>
-    <select class="filter-select" id="f-sort" onchange="onSortSelect()">
-      <option value="status">Sort: Status</option>
-      <option value="headcount">Sort: Headcount</option>
-      <option value="util">Sort: Utilization</option>
-      <option value="name">Sort: Lab Name</option>
-    </select>
-    <select class="filter-select" id="f-platform" onchange="onPlatformFilterChange()">
-      <option value="caltrak" selected>Platform: CalTrak</option>
-      <option value="indysoft">Platform: Indysoft</option>
-      <option value="all">Platform: All</option>
-    </select>
-    <div class="view-toggle" role="group" aria-label="Capacity views">
-      <button type="button" class="view-btn" data-view="weekly" onclick="setView('weekly')">Weekly</button>
-      <button type="button" class="view-btn" data-view="monthly" onclick="setView('monthly')">Monthly</button>
-      <button type="button" class="view-btn" data-view="quarterly" onclick="setView('quarterly')">Quarterly</button>
-      <button type="button" class="view-btn" data-view="yearly" onclick="setView('yearly')">Yearly</button>
-    </div>
-    <div class="row-count" id="row-count">— labs</div>
-  </div>
-
-  <!-- ── Table ── -->
-  <div class="table-wrap">
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:22%" data-sort="name" data-help="Lab location or business unit name." onclick="setSort('name')">Lab <span class="sort-arrow" id="arr-name"></span></th>
-            <th style="width:8%" class="num" data-sort="headcount" data-help="Starting technician headcount for the selected month before onsite deductions." onclick="setSort('headcount')">Base techs <span class="sort-arrow" id="arr-headcount"></span></th>
-            <th style="width:9%" class="num" data-sort="onsite" data-help="FTEs assigned to onsite work this week (derived from uploaded schedule)." onclick="setSort('onsite')">On onsite <span class="sort-arrow" id="arr-onsite"></span></th>
-            <th style="width:9%" class="num" data-help="Technicians available for lab work after onsite assignments (Base techs minus On onsite).">Avail</th>
-            <th style="width:9%" class="num" id="hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
-            <th style="width:10%" class="num" id="hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
-            <th style="width:10%" class="num" id="hdr-gap" data-sort="gap" data-help="Weekly cap minus Std hrs; negative means shortfall." onclick="setSort('gap')">Weekly gap <span class="sort-arrow" id="arr-gap"></span></th>
-            <th style="width:13%" class="num" data-sort="util" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity." onclick="setSort('util')">Utilization <span class="sort-arrow" id="arr-util"></span></th>
-            <th style="width:10%" class="num" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
-          </tr>
-        </thead>
-        <tbody id="tbl-body"></tbody>
-      </table>
-    </div>
-  </div>
+  </section>
 
   <div class="footer">
     <div>Lab Capacity Review · Internal Use Only</div>

@@ -86,6 +86,39 @@
 
   /* ── Layout ── */
   .page { max-width: 1280px; margin: 0 auto; padding: 1.75rem 2rem 4rem; }
+  .page-tab-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--white);
+    padding: 4px;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+  }
+  .page-tab-btn {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .page-tab-btn:hover {
+    background: var(--light-blue);
+    color: var(--blue);
+  }
+  .page-tab-btn.active {
+    background: var(--blue);
+    color: var(--white);
+  }
+  .page-tab-pane[hidden] { display: none !important; }
+  .page-tab-pane.active { display: block; }
 
   /* ── Cards ── */
   .card {
@@ -111,6 +144,31 @@
     gap: 1rem;
     margin-bottom: 1rem;
     align-items: start;
+  }
+  .scenario-launch-card { margin-bottom: 1rem; }
+  .scenario-launch-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .scenario-launch-text {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .scenario-launch-text.is-active {
+    color: #244b70;
+    font-weight: 600;
+  }
+  .scenario-tab-grid {
+    display: grid;
+    gap: 1rem;
+    align-items: start;
+  }
+  .scenario-tab-text {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 10px;
   }
 
   /* ── Week Nav ── */
@@ -772,12 +830,24 @@
 
   /* ── Responsive ── */
   @media (max-width: 900px) {
+    .page-tab-nav {
+      width: 100%;
+      justify-content: stretch;
+    }
+    .page-tab-btn {
+      flex: 1;
+      text-align: center;
+    }
     .top-grid { grid-template-columns: 1fr; }
     .upload-grid { grid-template-columns: 1fr; }
     .summary-grid { grid-template-columns: repeat(3, 1fr); }
     .params-grid { grid-template-columns: repeat(2, 1fr); }
     .scenario-toolbar { grid-template-columns: 1fr 1fr; }
     .scenario-grid { grid-template-columns: repeat(2, 1fr); }
+    .scenario-launch-body {
+      flex-direction: column;
+      align-items: flex-start;
+    }
     .page { padding: 1rem 1rem 3rem; }
     .modal-grid { grid-template-columns: 1fr; }
   }

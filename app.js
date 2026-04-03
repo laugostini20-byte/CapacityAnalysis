@@ -69,6 +69,8 @@ let sortDir = 1;
 let colHelpTipEl = null;
 let currentView = 'weekly';
 let currentThresh = 0.85;
+const PAGE_TABS = new Set(['overview', 'scenario']);
+let currentPageTab = 'overview';
 let platformFilterMode = 'caltrak';
 let selectedLabNames = new Set();
 let labPickerInitialized = false;
@@ -317,6 +319,43 @@ function getScenarioProfileNameFallback() {
   return `Scenario ${stamp}`;
 }
 
+function getScenarioScopeLabel() {
+  return scenarioModel.scopeType === 'all'
+    ? 'all labs'
+    : scenarioModel.scopeType === 'platform'
+      ? `${scenarioModel.scopePlatform === 'indysoft' ? 'Indysoft' : 'CalTrak'} labs`
+      : 'selected labs from the lab picker';
+}
+
+function updateScenarioSnapshot() {
+  const snapshotEl = document.getElementById('scenario-snapshot');
+  if (!snapshotEl) return;
+
+  if (!scenarioModel.enabled) {
+    const savedCount = scenarioProfiles.length;
+    snapshotEl.classList.remove('is-active');
+    snapshotEl.textContent = savedCount
+      ? `${savedCount} saved scenario${savedCount === 1 ? '' : 's'} available. Scenario mode is currently off.`
+      : 'Scenario mode is off. Use the Scenario Analysis tab to run what-if tests.';
+    return;
+  }
+
+  const fmtSigned = (value, suffix = '') => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return `0${suffix}`;
+    const rounded = Number.isInteger(n) ? n : Number(n.toFixed(1));
+    return `${rounded > 0 ? '+' : ''}${rounded}${suffix}`;
+  };
+  const scenarioName = (scenarioModel.name || 'Untitled').trim() || 'Untitled';
+  snapshotEl.classList.add('is-active');
+  snapshotEl.textContent =
+    `Active scenario "${scenarioName}" for ${getScenarioScopeLabel()} · ` +
+    `Onsite ${fmtSigned(scenarioModel.onsitePct, '%')} · ` +
+    `Productivity ${fmtSigned(scenarioModel.productivityPct, '%')} · ` +
+    `Headcount ${fmtSigned(scenarioModel.headcountDelta)} · ` +
+    `Demand ${fmtSigned(scenarioModel.demandPct, '%')}`;
+}
+
 function updateScenarioControls() {
   const enabledEl = document.getElementById('s-enabled');
   const nameEl = document.getElementById('s-name');
@@ -342,14 +381,11 @@ function updateScenarioControls() {
   profileEl.value = scenarioModel.id != null ? String(scenarioModel.id) : '';
   scopePlatformWrap.style.display = (scenarioModel.scopeType === 'platform') ? '' : 'none';
 
-  const modeText = scenarioModel.scopeType === 'all'
-    ? 'all labs'
-    : scenarioModel.scopeType === 'platform'
-      ? `${scenarioModel.scopePlatform === 'indysoft' ? 'Indysoft' : 'CalTrak'} labs`
-      : 'selected labs from the lab picker';
+  const modeText = getScenarioScopeLabel();
   noteEl.textContent = scenarioModel.enabled
     ? `Scenario is active for ${modeText}. Baseline data is unchanged.`
     : 'Scenario mode is off. Enable it to run what-if tests without changing baseline data.';
+  updateScenarioSnapshot();
 }
 
 function setScenarioModelFromControls({recalcNow = true} = {}) {
@@ -1079,6 +1115,7 @@ function renderScenarioProfileOptions() {
     );
   selectEl.innerHTML = options.join('');
   selectEl.value = currentId;
+  updateScenarioSnapshot();
 }
 
 async function loadPersistedScenarios({silent = false} = {}) {
@@ -1494,6 +1531,26 @@ function updateStatusSummary() {
   document.getElementById('m-risk').textContent = risk;
   document.getElementById('m-ok').textContent = ok;
   updateScenarioImpact(selectedRows);
+}
+
+function setPageTab(tab) {
+  const nextTab = PAGE_TABS.has(tab) ? tab : 'overview';
+  currentPageTab = nextTab;
+
+  document.querySelectorAll('.page-tab-btn').forEach(btn => {
+    const isActive = btn.dataset.pageTab === nextTab;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    btn.setAttribute('tabindex', isActive ? '0' : '-1');
+  });
+  document.querySelectorAll('.page-tab-pane').forEach(pane => {
+    const isActive = pane.dataset.pageTab === nextTab;
+    pane.classList.toggle('active', isActive);
+    if (isActive) pane.removeAttribute('hidden');
+    else pane.setAttribute('hidden', '');
+  });
+
+  if (nextTab !== 'overview') closeLabPickerMenu();
 }
 
 function setView(view) {
@@ -1955,6 +2012,7 @@ async function initApp() {
   updateScenarioControls();
   const platformSelect = document.getElementById('f-platform');
   if (platformSelect) platformSelect.value = platformFilterMode;
+  setPageTab(currentPageTab);
   setSort('status');
   recalc();
   try {
