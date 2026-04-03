@@ -76,6 +76,9 @@ let selectedLabNames = new Set();
 let labPickerInitialized = false;
 let labPickerSearchTerm = '';
 let selectAllVisibleLabsOnNextRender = false;
+let scenarioSelectedLabNames = new Set();
+let scenarioLabPickerInitialized = false;
+let scenarioLabPickerSearchTerm = '';
 let scenarioProfiles = [];
 let scenarioPersistenceEnabled = false;
 let scenarioRowsByLab = new Map();
@@ -84,7 +87,7 @@ const defaultScenarioModel = () => ({
   id: null,
   name: '',
   enabled: false,
-  scopeType: 'all',
+  scopeType: 'selection',
   scopePlatform: 'caltrak',
   onsitePct: 0,
   productivityPct: 0,
@@ -294,7 +297,7 @@ function normalizeScenarioConfig(raw) {
   const scopePlatform = String(src.scopePlatform || 'caltrak').toLowerCase();
   return {
     enabled: Boolean(src.enabled),
-    scopeType: ['all', 'platform', 'selection'].includes(scopeType) ? scopeType : 'all',
+    scopeType: ['all', 'platform', 'selection'].includes(scopeType) ? scopeType : 'selection',
     scopePlatform: ['caltrak', 'indysoft'].includes(scopePlatform) ? scopePlatform : 'caltrak',
     onsitePct: toNum(src.onsitePct, 0),
     productivityPct: toNum(src.productivityPct, 0),
@@ -305,13 +308,7 @@ function normalizeScenarioConfig(raw) {
 
 function isScenarioScopeMatch(row) {
   if (!scenarioModel.enabled) return false;
-  if (scenarioModel.scopeType === 'all') return true;
-  if (scenarioModel.scopeType === 'platform') {
-    const want = scenarioModel.scopePlatform === 'indysoft' ? 'Indysoft' : 'CalTrak';
-    return row.platform === want;
-  }
-  if (scenarioModel.scopeType === 'selection') return selectedLabNames.has(row.lab);
-  return false;
+  return scenarioSelectedLabNames.has(row.lab);
 }
 
 function getScenarioProfileNameFallback() {
@@ -320,11 +317,12 @@ function getScenarioProfileNameFallback() {
 }
 
 function getScenarioScopeLabel() {
-  return scenarioModel.scopeType === 'all'
-    ? 'all labs'
-    : scenarioModel.scopeType === 'platform'
-      ? `${scenarioModel.scopePlatform === 'indysoft' ? 'Indysoft' : 'CalTrak'} labs`
-      : 'selected labs from the lab picker';
+  const selectedCount = scenarioSelectedLabNames.size;
+  const totalCount = labRows.length;
+  if (!totalCount) return 'no labs';
+  if (!selectedCount) return 'no selected labs';
+  if (selectedCount === totalCount) return 'all visible labs';
+  return `${selectedCount} selected lab${selectedCount === 1 ? '' : 's'}`;
 }
 
 function updateScenarioSnapshot() {
@@ -332,11 +330,8 @@ function updateScenarioSnapshot() {
   if (!snapshotEl) return;
 
   if (!scenarioModel.enabled) {
-    const savedCount = scenarioProfiles.length;
     snapshotEl.classList.remove('is-active');
-    snapshotEl.textContent = savedCount
-      ? `${savedCount} saved scenario${savedCount === 1 ? '' : 's'} available. Scenario mode is currently off.`
-      : 'Scenario mode is off. Use the Scenario Analysis tab to run what-if tests.';
+    snapshotEl.textContent = 'Scenario workspace is ready. Open Scenario Analysis to run what-if tests from the current baseline.';
     return;
   }
 
@@ -349,11 +344,11 @@ function updateScenarioSnapshot() {
   const scenarioName = (scenarioModel.name || 'Untitled').trim() || 'Untitled';
   snapshotEl.classList.add('is-active');
   snapshotEl.textContent =
-    `Active scenario "${scenarioName}" for ${getScenarioScopeLabel()} · ` +
+    `Scenario "${scenarioName}" prepared for ${getScenarioScopeLabel()} · ` +
     `Onsite ${fmtSigned(scenarioModel.onsitePct, '%')} · ` +
     `Productivity ${fmtSigned(scenarioModel.productivityPct, '%')} · ` +
     `Headcount ${fmtSigned(scenarioModel.headcountDelta)} · ` +
-    `Demand ${fmtSigned(scenarioModel.demandPct, '%')}`;
+    `Demand ${fmtSigned(scenarioModel.demandPct, '%')} · Dashboard remains baseline`;
 }
 
 function updateScenarioControls() {
@@ -368,23 +363,24 @@ function updateScenarioControls() {
   const scopePlatformWrap = document.getElementById('s-scope-platform-wrap');
   const noteEl = document.getElementById('scenario-note');
   const profileEl = document.getElementById('s-profile');
-  if (!enabledEl || !nameEl || !scopeTypeEl || !scopePlatformEl || !onsiteEl || !prodEl || !hcEl || !demandEl || !scopePlatformWrap || !noteEl || !profileEl) return;
 
-  enabledEl.checked = Boolean(scenarioModel.enabled);
-  nameEl.value = scenarioModel.name || '';
-  scopeTypeEl.value = scenarioModel.scopeType || 'all';
-  scopePlatformEl.value = scenarioModel.scopePlatform || 'caltrak';
-  onsiteEl.value = String(scenarioModel.onsitePct ?? 0);
-  prodEl.value = String(scenarioModel.productivityPct ?? 0);
-  hcEl.value = String(scenarioModel.headcountDelta ?? 0);
-  demandEl.value = String(scenarioModel.demandPct ?? 0);
-  profileEl.value = scenarioModel.id != null ? String(scenarioModel.id) : '';
-  scopePlatformWrap.style.display = (scenarioModel.scopeType === 'platform') ? '' : 'none';
+  if (enabledEl) enabledEl.checked = Boolean(scenarioModel.enabled);
+  if (nameEl) nameEl.value = scenarioModel.name || '';
+  if (scopeTypeEl) scopeTypeEl.value = scenarioModel.scopeType || 'selection';
+  if (scopePlatformEl) scopePlatformEl.value = scenarioModel.scopePlatform || 'caltrak';
+  if (onsiteEl) onsiteEl.value = String(scenarioModel.onsitePct ?? 0);
+  if (prodEl) prodEl.value = String(scenarioModel.productivityPct ?? 0);
+  if (hcEl) hcEl.value = String(scenarioModel.headcountDelta ?? 0);
+  if (demandEl) demandEl.value = String(scenarioModel.demandPct ?? 0);
+  if (profileEl) profileEl.value = scenarioModel.id != null ? String(scenarioModel.id) : '';
+  if (scopePlatformWrap && scopeTypeEl) scopePlatformWrap.style.display = (scopeTypeEl.value === 'platform') ? '' : 'none';
 
-  const modeText = getScenarioScopeLabel();
-  noteEl.textContent = scenarioModel.enabled
-    ? `Scenario is active for ${modeText}. Baseline data is unchanged.`
-    : 'Scenario mode is off. Enable it to run what-if tests without changing baseline data.';
+  if (noteEl) {
+    const modeText = getScenarioScopeLabel();
+    noteEl.textContent = scenarioModel.enabled
+      ? `Scenario is active for ${modeText} in this tab. Baseline data is unchanged.`
+      : 'Scenario mode is off. Open Scenario Analysis to run what-if tests without changing baseline data.';
+  }
   updateScenarioSnapshot();
 }
 
@@ -399,9 +395,9 @@ function setScenarioModelFromControls({recalcNow = true} = {}) {
   const demandEl = document.getElementById('s-demand-pct');
 
   const parsed = normalizeScenarioConfig({
-    enabled: enabledEl ? enabledEl.checked : false,
-    scopeType: scopeTypeEl ? scopeTypeEl.value : 'all',
-    scopePlatform: scopePlatformEl ? scopePlatformEl.value : 'caltrak',
+    enabled: true,
+    scopeType: 'selection',
+    scopePlatform: 'caltrak',
     onsitePct: onsiteEl ? onsiteEl.value : 0,
     productivityPct: prodEl ? prodEl.value : 0,
     headcountDelta: hcEl ? hcEl.value : 0,
@@ -418,6 +414,16 @@ function setScenarioModelFromControls({recalcNow = true} = {}) {
 
 function onScenarioControlChange(recalcNow = true) {
   setScenarioModelFromControls({recalcNow});
+}
+
+function resetScenarioAnalysis() {
+  scenarioModel = {
+    ...defaultScenarioModel(),
+    enabled: true,
+    scopeType: 'selection'
+  };
+  updateScenarioControls();
+  recalc();
 }
 
 function labMatchesPlatformFilter(labName) {
@@ -524,24 +530,21 @@ function toggleLabSelection(labName, isSelected) {
   if (isSelected) selectedLabNames.add(labName);
   else selectedLabNames.delete(labName);
   updateLabPickerSummary();
-  if (scenarioModel.enabled && scenarioModel.scopeType === 'selection') recalc();
-  else renderTable();
+  renderTable();
 }
 
 function selectAllLabs(e) {
   if (e) e.stopPropagation();
   selectedLabNames = new Set(getAvailableLabNames());
   renderLabPickerOptions();
-  if (scenarioModel.enabled && scenarioModel.scopeType === 'selection') recalc();
-  else renderTable();
+  renderTable();
 }
 
 function deselectAllLabs(e) {
   if (e) e.stopPropagation();
   selectedLabNames.clear();
   renderLabPickerOptions();
-  if (scenarioModel.enabled && scenarioModel.scopeType === 'selection') recalc();
-  else renderTable();
+  renderTable();
 }
 
 function onLabPickerSearchInput(value) {
@@ -589,10 +592,145 @@ function closeLabPickerMenu() {
   picker.classList.remove('open');
 }
 
+function syncScenarioLabPickerSelection(availableLabNames) {
+  const availableSet = new Set(availableLabNames);
+  const filteredSelected = [...scenarioSelectedLabNames].filter(name => availableSet.has(name));
+  if (!scenarioLabPickerInitialized) {
+    scenarioSelectedLabNames = new Set(availableLabNames);
+    scenarioLabPickerInitialized = true;
+    return;
+  }
+  scenarioSelectedLabNames = new Set(filteredSelected);
+}
+
+function updateScenarioLabPickerSummary(availableLabNames = getAvailableLabNames()) {
+  const summaryEl = document.getElementById('s-lab-picker-summary');
+  if (!summaryEl) return;
+  const selectedCount = scenarioSelectedLabNames.size;
+  const totalCount = availableLabNames.length;
+  if (!totalCount) {
+    summaryEl.textContent = 'No labs available';
+    return;
+  }
+  if (selectedCount === 0) {
+    summaryEl.textContent = 'No labs selected';
+    return;
+  }
+  if (selectedCount === totalCount) {
+    summaryEl.textContent = 'All labs';
+    return;
+  }
+  summaryEl.textContent = selectedCount === 1 ? '1 lab selected' : `${selectedCount} labs selected`;
+}
+
+function renderScenarioLabPickerOptions() {
+  const menu = document.getElementById('s-lab-picker-menu');
+  if (!menu) return;
+  const availableLabNames = getAvailableLabNames();
+  syncScenarioLabPickerSelection(availableLabNames);
+  updateScenarioLabPickerSummary(availableLabNames);
+
+  if (!availableLabNames.length) {
+    scenarioLabPickerSearchTerm = '';
+    menu.innerHTML = '<div class="lab-picker-empty">No labs available for this view.</div>';
+    return;
+  }
+
+  const optionsHtml = availableLabNames
+    .map(name => `<label class="lab-picker-option" data-s-lab-key="${escapeHtml(normalizeLabForMatch(name))}"><input type="checkbox" value="${escapeHtml(name)}" onchange="toggleScenarioLabSelection(this.value, this.checked)" ${scenarioSelectedLabNames.has(name) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`)
+    .join('');
+
+  menu.innerHTML = `
+    <div class="lab-picker-actions">
+      <button type="button" class="lab-picker-action" onclick="selectAllScenarioLabs(event)">Select all</button>
+      <button type="button" class="lab-picker-action" onclick="deselectAllScenarioLabs(event)">Deselect all</button>
+    </div>
+    <div class="lab-picker-search-wrap">
+      <input type="text" class="lab-picker-search" id="s-lab-picker-search" placeholder="Search labs..." value="${escapeHtml(scenarioLabPickerSearchTerm)}" oninput="onScenarioLabPickerSearchInput(this.value)">
+    </div>
+    <div class="lab-picker-list" id="s-lab-picker-list">${optionsHtml}</div>
+    <div class="lab-picker-empty" id="s-lab-picker-no-results" hidden>No labs match your search.</div>
+  `;
+  applyScenarioLabPickerSearch();
+}
+
+function getScenarioSelectedRows() {
+  if (!scenarioSelectedLabNames.size) return [];
+  const selectedSet = new Set(scenarioSelectedLabNames);
+  return labRows.filter(r => selectedSet.has(r.lab));
+}
+
+function toggleScenarioLabSelection(labName, isSelected) {
+  if (isSelected) scenarioSelectedLabNames.add(labName);
+  else scenarioSelectedLabNames.delete(labName);
+  updateScenarioLabPickerSummary();
+  recalc();
+}
+
+function selectAllScenarioLabs(e) {
+  if (e) e.stopPropagation();
+  scenarioSelectedLabNames = new Set(getAvailableLabNames());
+  renderScenarioLabPickerOptions();
+  recalc();
+}
+
+function deselectAllScenarioLabs(e) {
+  if (e) e.stopPropagation();
+  scenarioSelectedLabNames.clear();
+  renderScenarioLabPickerOptions();
+  recalc();
+}
+
+function onScenarioLabPickerSearchInput(value) {
+  scenarioLabPickerSearchTerm = normalizeLabForMatch(value || '');
+  applyScenarioLabPickerSearch();
+}
+
+function applyScenarioLabPickerSearch() {
+  const list = document.getElementById('s-lab-picker-list');
+  if (!list) return;
+  const noResultsEl = document.getElementById('s-lab-picker-no-results');
+  const options = list.querySelectorAll('.lab-picker-option');
+  let shownCount = 0;
+  options.forEach(option => {
+    const key = option.getAttribute('data-s-lab-key') || '';
+    const isMatch = !scenarioLabPickerSearchTerm || key.includes(scenarioLabPickerSearchTerm);
+    option.style.display = isMatch ? '' : 'none';
+    if (isMatch) shownCount += 1;
+  });
+  if (noResultsEl) noResultsEl.style.display = shownCount === 0 ? 'block' : 'none';
+}
+
+function toggleScenarioLabPickerMenu(e) {
+  if (e) e.stopPropagation();
+  const picker = document.getElementById('s-lab-picker');
+  const menu = document.getElementById('s-lab-picker-menu');
+  if (!picker || !menu) return;
+  const isHidden = menu.hasAttribute('hidden');
+  if (isHidden) {
+    menu.removeAttribute('hidden');
+    picker.classList.add('open');
+    const searchInput = document.getElementById('s-lab-picker-search');
+    if (searchInput) searchInput.focus();
+  } else {
+    menu.setAttribute('hidden', '');
+    picker.classList.remove('open');
+  }
+}
+
+function closeScenarioLabPickerMenu() {
+  const picker = document.getElementById('s-lab-picker');
+  const menu = document.getElementById('s-lab-picker-menu');
+  if (!picker || !menu) return;
+  menu.setAttribute('hidden', '');
+  picker.classList.remove('open');
+}
+
 function handleDocumentClickForLabPicker(e) {
   const picker = document.getElementById('lab-picker');
-  if (!picker) return;
-  if (!picker.contains(e.target)) closeLabPickerMenu();
+  if (picker && !picker.contains(e.target)) closeLabPickerMenu();
+  const scenarioPicker = document.getElementById('s-lab-picker');
+  if (scenarioPicker && !scenarioPicker.contains(e.target)) closeScenarioLabPickerMenu();
 }
 
 function resolveLabName(raw) {
@@ -1104,7 +1242,10 @@ async function deleteScenarioFromApi(id) {
 
 function renderScenarioProfileOptions() {
   const selectEl = document.getElementById('s-profile');
-  if (!selectEl) return;
+  if (!selectEl) {
+    updateScenarioSnapshot();
+    return;
+  }
   const currentId = scenarioModel.id != null ? String(scenarioModel.id) : '';
   const options = ['<option value="">Saved scenarios</option>']
     .concat(
@@ -1375,9 +1516,9 @@ function getBaselineMetricsForRow(row) {
   };
 }
 
-function getDisplayMetricsForRow(row) {
+function getDisplayMetricsForRow(row, {useScenario = false} = {}) {
   const baseline = getBaselineMetricsForRow(row);
-  if (!scenarioModel.enabled) return {...baseline, baseline: null, inScope: false};
+  if (!useScenario || !scenarioModel.enabled) return {...baseline, baseline: null, inScope: false};
   const scenarioRow = scenarioRowsByLab.get(row.lab);
   if (!scenarioRow) return {...baseline, baseline: null, inScope: false};
   return {...scenarioRow, baseline};
@@ -1400,6 +1541,9 @@ function updateViewDecor() {
   const demandEl = document.getElementById('hdr-demand');
   const capEl = document.getElementById('hdr-cap');
   const gapEl = document.getElementById('hdr-gap');
+  const scenarioDemandEl = document.getElementById('s-hdr-demand');
+  const scenarioCapEl = document.getElementById('s-hdr-cap');
+  const scenarioGapEl = document.getElementById('s-hdr-gap');
   if (demandEl) {
     demandEl.textContent = meta.demandHeader;
     demandEl.setAttribute('data-help', meta.demandHelp);
@@ -1413,6 +1557,18 @@ function updateViewDecor() {
     const arrow = arr ? arr.outerHTML : '<span class="sort-arrow" id="arr-gap"></span>';
     gapEl.innerHTML = `${meta.gapHeader} ${arrow}`;
     gapEl.setAttribute('data-help', meta.gapHelp);
+  }
+  if (scenarioDemandEl) {
+    scenarioDemandEl.textContent = meta.demandHeader;
+    scenarioDemandEl.setAttribute('data-help', meta.demandHelp);
+  }
+  if (scenarioCapEl) {
+    scenarioCapEl.textContent = meta.capHeader;
+    scenarioCapEl.setAttribute('data-help', meta.capHelp);
+  }
+  if (scenarioGapEl) {
+    scenarioGapEl.textContent = meta.gapHeader;
+    scenarioGapEl.setAttribute('data-help', meta.gapHelp);
   }
 
   document.querySelectorAll('.view-btn').forEach(btn => {
@@ -1499,7 +1655,7 @@ function updateScenarioImpact(selectedRows) {
   const scenarioCounts = {over: 0, risk: 0, ok: 0};
   selectedRows.forEach(row => {
     const baseline = getBaselineMetricsForRow(row);
-    const display = getDisplayMetricsForRow(row);
+    const display = getDisplayMetricsForRow(row, {useScenario: true});
     baselineCounts[baseline.status] += 1;
     scenarioCounts[display.status] += 1;
   });
@@ -1523,14 +1679,13 @@ function updateScenarioImpact(selectedRows) {
 
 function updateStatusSummary() {
   const selectedRows = getSelectedRows();
-  const over = selectedRows.filter(r => getDisplayMetricsForRow(r).status === 'over').length;
-  const risk = selectedRows.filter(r => getDisplayMetricsForRow(r).status === 'risk').length;
-  const ok = selectedRows.filter(r => getDisplayMetricsForRow(r).status === 'ok').length;
+  const over = selectedRows.filter(r => getBaselineMetricsForRow(r).status === 'over').length;
+  const risk = selectedRows.filter(r => getBaselineMetricsForRow(r).status === 'risk').length;
+  const ok = selectedRows.filter(r => getBaselineMetricsForRow(r).status === 'ok').length;
   document.getElementById('m-total').textContent = selectedRows.length;
   document.getElementById('m-over').textContent = over;
   document.getElementById('m-risk').textContent = risk;
   document.getElementById('m-ok').textContent = ok;
-  updateScenarioImpact(selectedRows);
 }
 
 function setPageTab(tab) {
@@ -1551,6 +1706,12 @@ function setPageTab(tab) {
   });
 
   if (nextTab !== 'overview') closeLabPickerMenu();
+  if (nextTab !== 'scenario') closeScenarioLabPickerMenu();
+  if (nextTab === 'scenario' && !scenarioModel.enabled) {
+    scenarioModel.enabled = true;
+    updateScenarioControls();
+    recalc();
+  }
 }
 
 function setView(view) {
@@ -1612,6 +1773,7 @@ function setSort(key) {
   const sortSelect = document.getElementById('f-sort');
   if (sortSelect && [...sortSelect.options].some(o => o.value === key)) sortSelect.value = key;
   renderTable();
+  renderScenarioTable();
 }
 
 function onSortSelect() {
@@ -1626,6 +1788,7 @@ function onSortSelect() {
   const activeTh = document.querySelector(`thead th[data-sort="${key}"]`);
   if (activeTh) activeTh.classList.add('sorted');
   renderTable();
+  renderScenarioTable();
 }
 
 async function loadSchedule(e) {
@@ -1775,6 +1938,7 @@ function recalc() {
   const activeLabNames = new Set(activeLabs.map(l => l.lab));
   const activeLabList = [...activeLabNames].sort((a, b) => a.localeCompare(b));
   syncLabPickerSelection(activeLabList);
+  syncScenarioLabPickerSelection(activeLabList);
   const techDaysLost = getTechDaysLost(currentWeekStart, activeLabNames);
   const onsiteRange = getDateRangeForView(currentWeekStart, currentView);
   const techDaysLostForView = getTechDaysLostInRange(onsiteRange.start, onsiteRange.end, activeLabNames);
@@ -1857,16 +2021,9 @@ function recalc() {
     rowByLab
   });
 
-  const onsiteMetric = scenarioModel.enabled && scenarioAggregate
-    ? scenarioAggregate.scenarioOnsiteFTE
-    : totalOnsiteFTE;
-  document.getElementById('m-onsite').textContent = onsiteMetric.toFixed(1);
+  document.getElementById('m-onsite').textContent = totalOnsiteFTE.toFixed(1);
   const onsiteSubEl = document.getElementById('m-onsite-sub');
-  if (onsiteSubEl) {
-    onsiteSubEl.textContent = scenarioModel.enabled && scenarioAggregate
-      ? `Scenario FTE ${getOnsitePeriodLabel(currentView)} (base ${scenarioAggregate.baselineOnsiteFTE.toFixed(1)})`
-      : `FTE equivalent ${getOnsitePeriodLabel(currentView)}`;
-  }
+  if (onsiteSubEl) onsiteSubEl.textContent = `FTE equivalent ${getOnsitePeriodLabel(currentView)}`;
 
   const hasOnsite = scheduleRows.length > 0;
   const onsitePeriodLabel = getOnsitePeriodLabel(currentView);
@@ -1887,59 +2044,54 @@ function recalc() {
     ? `Std uploads active: ${stdHoursRangeOverrides.length}`
     : 'Std uploads: none';
   const scenarioText = scenarioModel.enabled
-    ? `Scenario: ${(scenarioModel.name || 'Untitled').trim() || 'Untitled'}`
-    : 'Scenario: off';
+    ? 'Scenario analysis tab ready'
+    : 'Scenario analysis tab idle';
   document.getElementById('week-sub').textContent = `${onsiteText} · ${hcText} · ${stdText} · ${stdUploadText} · ${scenarioText}`;
 
   updateViewDecor();
   renderLabPickerOptions();
+  renderScenarioLabPickerOptions();
   renderTable();
+  renderScenarioTable();
+  updateScenarioControls();
 }
 
-function renderTable() {
-  const fs = document.getElementById('f-status').value;
-
-  let rows = getSelectedRows();
-  updateStatusSummary();
-  if (fs !== 'all') rows = rows.filter(r => getDisplayMetricsForRow(r).status === fs);
-
-  const statusOrder = {over:0, risk:1, ok:2};
-  rows.sort((a,b) => {
-    const am = getDisplayMetricsForRow(a);
-    const bm = getDisplayMetricsForRow(b);
-    let av, bv;
-    if (sortKey==='status')    {
+function sortRowsForTable(rows, {useScenario = false} = {}) {
+  const statusOrder = {over: 0, risk: 1, ok: 2};
+  rows.sort((a, b) => {
+    const am = getDisplayMetricsForRow(a, {useScenario});
+    const bm = getDisplayMetricsForRow(b, {useScenario});
+    let av;
+    let bv;
+    if (sortKey === 'status') {
       av = statusOrder[am.status];
       bv = statusOrder[bm.status];
-    }
-    else if (sortKey==='name') { return sortDir * a.lab.localeCompare(b.lab); }
-    else if (sortKey==='headcount') { av=am.baseTech; bv=bm.baseTech; }
-    else if (sortKey==='util') { av=am.util ?? -1; bv=bm.util ?? -1; }
-    else if (sortKey==='gap')  { av=am.gap; bv=bm.gap; }
-    else if (sortKey==='onsite'){av=am.lostFTE; bv=bm.lostFTE; }
-    else {
+    } else if (sortKey === 'name') {
+      return sortDir * a.lab.localeCompare(b.lab);
+    } else if (sortKey === 'headcount') {
+      av = am.baseTech;
+      bv = bm.baseTech;
+    } else if (sortKey === 'util') {
+      av = am.util ?? -1;
+      bv = bm.util ?? -1;
+    } else if (sortKey === 'gap') {
+      av = am.gap;
+      bv = bm.gap;
+    } else if (sortKey === 'onsite') {
+      av = am.lostFTE;
+      bv = bm.lostFTE;
+    } else {
       av = statusOrder[am.status];
       bv = statusOrder[bm.status];
     }
     if (sortKey === 'status') return sortDir * (av - bv);
     return sortDir * (bv - av);
   });
+}
 
-  document.getElementById('row-count').textContent = `${rows.length} lab${rows.length!==1?'s':''}`;
-  const body = document.getElementById('tbl-body');
-
-  if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="9">
-      <div class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <div class="empty-title">No labs match your filters</div>
-        <div class="empty-sub">Try adjusting lab selection or status filter</div>
-      </div></td></tr>`;
-    return;
-  }
-
-  body.innerHTML = rows.map(r => {
-    const display = getDisplayMetricsForRow(r);
+function buildTableRowsHtml(rows, {useScenario = false} = {}) {
+  return rows.map(r => {
+    const display = getDisplayMetricsForRow(r, {useScenario});
     const baseline = display.baseline;
     const demand = display.demand;
     const cap = display.cap;
@@ -1949,18 +2101,18 @@ function renderTable() {
 
     const utilPct  = util != null ? Math.round(util * 100) : null;
     const barPct   = utilPct != null ? Math.min(utilPct, 100) : 0;
-    const barCls   = status==='over' ? 'bar-over' : status==='risk' ? 'bar-risk' : 'bar-ok';
-    const utilColor= status==='over' ? 'num-red'  : status==='risk' ? 'num-amber' : 'num-green';
-    const gapStr   = gap != null ? (gap>=0?'+':'')+Math.round(gap)+' hrs' : '—';
-    const gapCls   = gap < 0 ? 'num-red' : gap < cap*0.15 ? 'num-amber' : 'num-green';
+    const barCls   = status === 'over' ? 'bar-over' : status === 'risk' ? 'bar-risk' : 'bar-ok';
+    const utilColor = status === 'over' ? 'num-red' : status === 'risk' ? 'num-amber' : 'num-green';
+    const gapStr   = gap != null ? (gap >= 0 ? '+' : '') + Math.round(gap) + ' hrs' : '—';
+    const gapCls   = gap < 0 ? 'num-red' : gap < cap * 0.15 ? 'num-amber' : 'num-green';
     const lostDisp = display.lostFTE > 0
       ? `<span class="num-red">${display.lostFTE.toFixed(1)}</span>`
       : '<span class="num-muted">—</span>';
-    const availDisp= display.lostFTE > 0
+    const availDisp = display.lostFTE > 0
       ? `<span class="num-amber">${display.avail.toFixed(1)}</span>`
       : `${display.baseTech}`;
     const scenarioDeltaText = (currentValue, baselineValue, formatter, suffix = '') => {
-      if (!scenarioModel.enabled || !display.inScope || baselineValue == null || currentValue == null) return '';
+      if (!useScenario || !scenarioModel.enabled || !display.inScope || baselineValue == null || currentValue == null) return '';
       const delta = currentValue - baselineValue;
       const deltaStr = `${delta > 0 ? '+' : ''}${suffix === '%' ? Math.round(delta) : Math.round(delta)}${suffix}`;
       return `<span class="num-sub">Base ${formatter(baselineValue)} · Δ ${deltaStr}</span>`;
@@ -1971,33 +2123,89 @@ function renderTable() {
     const headcountSub = baseline ? scenarioDeltaText(display.baseTech, baseline.baseTech, v => `${Math.round(v)}`) : '';
     const onsiteSub = baseline ? scenarioDeltaText(display.lostFTE, baseline.lostFTE, v => v > 0 ? v.toFixed(1) : '—') : '';
     const availSub = baseline ? scenarioDeltaText(display.avail, baseline.avail, v => Number.isInteger(v) ? `${v}` : v.toFixed(1)) : '';
-    const utilSub = (scenarioModel.enabled && display.inScope && baseline && baseline.util != null && util != null)
+    const utilSub = (useScenario && scenarioModel.enabled && display.inScope && baseline && baseline.util != null && util != null)
       ? `<span class="num-sub">Base ${Math.round(baseline.util * 100)}% · Δ ${utilPct - Math.round(baseline.util * 100) > 0 ? '+' : ''}${utilPct - Math.round(baseline.util * 100)}%</span>`
       : '';
     let badge = '';
-    if (status==='over') badge='<span class="badge badge-over">&#9650; Over</span>';
-    else if (status==='risk') badge='<span class="badge badge-risk">&#9888; At risk</span>';
-    else badge='<span class="badge badge-ok">&#10003; Healthy</span>';
-    const statusSub = (scenarioModel.enabled && display.inScope && baseline && baseline.status !== status)
+    if (status === 'over') badge = '<span class="badge badge-over">&#9650; Over</span>';
+    else if (status === 'risk') badge = '<span class="badge badge-risk">&#9888; At risk</span>';
+    else badge = '<span class="badge badge-ok">&#10003; Healthy</span>';
+    const statusSub = (useScenario && scenarioModel.enabled && display.inScope && baseline && baseline.status !== status)
       ? `<span class="num-sub">Base: ${baseline.status === 'over' ? 'Over' : baseline.status === 'risk' ? 'At risk' : 'Healthy'}</span>`
       : '';
 
     return `<tr>
-      <td class="lab-name-cell"><div class="lab-name">${r.lab}</div><div class="platform-tag ${r.platform === 'Indysoft' ? 'platform-indysoft' : 'platform-caltrak'}">${r.platform}</div>${scenarioModel.enabled && display.inScope ? '<span class="num-sub">Scenario scope</span>' : ''}</td>
+      <td class="lab-name-cell"><div class="lab-name">${r.lab}</div><div class="platform-tag ${r.platform === 'Indysoft' ? 'platform-indysoft' : 'platform-caltrak'}">${r.platform}</div>${useScenario && scenarioModel.enabled && display.inScope ? '<span class="num-sub">Scenario scope</span>' : ''}</td>
       <td class="num">${Math.round(display.baseTech)}${headcountSub}</td>
       <td class="num">${lostDisp}${onsiteSub}</td>
       <td class="num">${availDisp}${availSub}</td>
       <td class="num">${fmtHrs(demand)}${demandSub}</td>
       <td class="num">${fmtHrs(cap)}${capSub}</td>
       <td class="num ${gapCls}">${gapStr}${gapSub}</td>
-      <td class="util-cell">${utilPct!=null?`
+      <td class="util-cell">${utilPct != null ? `
         <div class="util-wrap">
           <div class="util-pct ${utilColor}">${utilPct}%</div>
           <div class="bar-track"><div class="bar-fill ${barCls}" style="width:${barPct}%"></div></div>
-        </div>${utilSub}`:'—'}</td>
+        </div>${utilSub}` : '—'}</td>
       <td class="status-cell">${badge}${statusSub}</td>
     </tr>`;
   }).join('');
+}
+
+function renderRowsIntoTable({
+  rows,
+  bodyEl,
+  rowCountEl,
+  useScenario = false,
+  emptyTitle = 'No labs match your filters',
+  emptySub = 'Try adjusting lab selection or status filter'
+}) {
+  if (!bodyEl) return;
+  if (rowCountEl) rowCountEl.textContent = `${rows.length} lab${rows.length !== 1 ? 's' : ''}`;
+  if (!rows.length) {
+    bodyEl.innerHTML = `<tr><td colspan="9">
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">${escapeHtml(emptyTitle)}</div>
+        <div class="empty-sub">${escapeHtml(emptySub)}</div>
+      </div></td></tr>`;
+    return;
+  }
+  bodyEl.innerHTML = buildTableRowsHtml(rows, {useScenario});
+}
+
+function renderTable() {
+  const fsEl = document.getElementById('f-status');
+  const fs = fsEl ? fsEl.value : 'all';
+  let rows = getSelectedRows();
+  updateStatusSummary();
+  if (fs !== 'all') rows = rows.filter(r => getDisplayMetricsForRow(r, {useScenario: false}).status === fs);
+  sortRowsForTable(rows, {useScenario: false});
+  renderRowsIntoTable({
+    rows,
+    bodyEl: document.getElementById('tbl-body'),
+    rowCountEl: document.getElementById('row-count'),
+    useScenario: false
+  });
+}
+
+function renderScenarioTable() {
+  const bodyEl = document.getElementById('s-tbl-body');
+  if (!bodyEl) return;
+  const fsEl = document.getElementById('s-f-status');
+  const fs = fsEl ? fsEl.value : 'all';
+  let rows = getScenarioSelectedRows();
+  if (fs !== 'all') rows = rows.filter(r => getDisplayMetricsForRow(r, {useScenario: true}).status === fs);
+  sortRowsForTable(rows, {useScenario: true});
+  renderRowsIntoTable({
+    rows,
+    bodyEl,
+    rowCountEl: document.getElementById('s-row-count'),
+    useScenario: true,
+    emptyTitle: 'No labs selected for scenario',
+    emptySub: 'Use the scenario lab selector to choose labs.'
+  });
+  updateScenarioImpact(getScenarioSelectedRows());
 }
 
 // Init
@@ -2006,7 +2214,10 @@ async function initApp() {
   initColumnHelpTooltips();
   document.addEventListener('click', handleDocumentClickForLabPicker);
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeLabPickerMenu();
+    if (e.key === 'Escape') {
+      closeLabPickerMenu();
+      closeScenarioLabPickerMenu();
+    }
   });
   renderScenarioProfileOptions();
   updateScenarioControls();

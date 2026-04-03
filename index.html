@@ -207,34 +207,12 @@
         <div class="card-body">
           <div class="card-title">Scenario Lab</div>
           <div class="scenario-toolbar">
-            <label class="scenario-toggle">
-              <input type="checkbox" id="s-enabled" onchange="onScenarioControlChange()">
-              <span>Enable scenario</span>
-            </label>
             <input class="scenario-name" type="text" id="s-name" placeholder="Scenario name (example: Q2 onsite spike)" oninput="onScenarioControlChange(false)">
-            <select class="filter-select" id="s-profile" onchange="onScenarioProfileSelect()">
-              <option value="">Saved scenarios</option>
-            </select>
-            <button type="button" class="scenario-btn" onclick="saveScenarioProfile()">Save</button>
-            <button type="button" class="scenario-btn scenario-btn-light" onclick="deleteScenarioProfile()">Delete</button>
+            <button type="button" class="scenario-btn scenario-btn-light" onclick="resetScenarioAnalysis()">Reset adjustments</button>
           </div>
+          <div class="scenario-tab-text">Scenario analysis is always active in this tab and starts from the current dashboard baseline.</div>
 
           <div class="scenario-grid">
-            <div class="param">
-              <label>Scope</label>
-              <select id="s-scope-type" onchange="onScenarioControlChange()">
-                <option value="all">All labs</option>
-                <option value="platform">Platform</option>
-                <option value="selection">Selected labs</option>
-              </select>
-            </div>
-            <div class="param" id="s-scope-platform-wrap">
-              <label>Platform</label>
-              <select id="s-scope-platform" onchange="onScenarioControlChange()">
-                <option value="caltrak">CalTrak</option>
-                <option value="indysoft">Indysoft</option>
-              </select>
-            </div>
             <div class="param">
               <label>Onsite % change</label>
               <input type="number" id="s-onsite-pct" value="0" step="1" oninput="onScenarioControlChange()">
@@ -252,16 +230,54 @@
               <input type="number" id="s-demand-pct" value="0" step="1" oninput="onScenarioControlChange()">
             </div>
           </div>
-          <div class="scenario-note" id="scenario-note">Scenario mode is off. Enable it to run what-if tests without changing baseline data.</div>
+          <div class="scenario-note" id="scenario-note">Scenario adjustments apply to selected labs in this tab. Baseline data is unchanged.</div>
         </div>
       </div>
 
       <div class="scenario-impact" id="scenario-impact" hidden>Scenario impact will appear here.</div>
 
+      <div class="table-controls scenario-table-controls">
+        <div class="lab-picker" id="s-lab-picker">
+          <button type="button" class="lab-picker-btn" id="s-lab-picker-btn" onclick="toggleScenarioLabPickerMenu(event)">
+            <span id="s-lab-picker-summary">All labs</span>
+            <span class="lab-picker-caret">▾</span>
+          </button>
+          <div class="lab-picker-menu" id="s-lab-picker-menu" hidden></div>
+        </div>
+        <select class="filter-select" id="s-f-status" onchange="renderScenarioTable()">
+          <option value="all">All statuses</option>
+          <option value="over">Over capacity</option>
+          <option value="risk">At risk</option>
+          <option value="ok">Healthy</option>
+        </select>
+        <div class="row-count" id="s-row-count">— labs</div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:22%" data-help="Lab location or business unit name.">Lab</th>
+                <th style="width:8%" class="num" data-help="Starting technician headcount for the selected month before onsite deductions.">Base techs</th>
+                <th style="width:9%" class="num" data-help="FTEs assigned to onsite work this week (derived from uploaded schedule).">On onsite</th>
+                <th style="width:9%" class="num" data-help="Technicians available for lab work after onsite assignments (Base techs minus On onsite).">Avail</th>
+                <th style="width:9%" class="num" id="s-hdr-demand" data-help="Standard weekly demand hours for the lab.">Std hrs</th>
+                <th style="width:10%" class="num" id="s-hdr-cap" data-help="Estimated weekly supply capacity from available techs and assumptions.">Weekly cap</th>
+                <th style="width:10%" class="num" id="s-hdr-gap" data-help="Weekly cap minus Std hrs; negative means shortfall.">Weekly gap</th>
+                <th style="width:13%" class="num" data-help="Demand divided by capacity (Std hrs / Weekly cap). Higher percent means tighter capacity.">Utilization</th>
+                <th style="width:10%" class="num" data-help="Capacity health classification based on utilization threshold settings.">Status</th>
+              </tr>
+            </thead>
+            <tbody id="s-tbl-body"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-body">
           <div class="card-title">Review Results</div>
-          <div class="scenario-tab-text">Scenario changes flow into dashboard metrics and the lab table in real time. Return to Dashboard to review row-level impacts.</div>
+          <div class="scenario-tab-text">Scenario results are shown in this tab while the dashboard stays on baseline. Use Dashboard anytime to review unchanged baseline performance.</div>
           <button type="button" class="scenario-btn scenario-btn-light" onclick="setPageTab('overview')">Back to Dashboard</button>
         </div>
       </div>
