@@ -599,6 +599,33 @@ function getFiscalYearMonthKeys(date) {
   return Array.from({length: 12}, (_, i) => getMonthKey(addMonths(start, i)));
 }
 
+function getDateRangeForView(anchorDate, view = currentView) {
+  const base = new Date(anchorDate);
+  base.setHours(0, 0, 0, 0);
+  if (view === 'monthly') {
+    const bounds = getMonthBoundsFromKey(getMonthKey(base));
+    if (bounds) return {start: bounds.start, end: bounds.end};
+  } else if (view === 'quarterly') {
+    const quarterKeys = getFiscalQuarterMonthKeys(base);
+    const startBounds = getMonthBoundsFromKey(quarterKeys[0]);
+    const endBounds = getMonthBoundsFromKey(quarterKeys[quarterKeys.length - 1]);
+    if (startBounds && endBounds) return {start: startBounds.start, end: endBounds.end};
+  } else if (view === 'yearly') {
+    const yearKeys = getFiscalYearMonthKeys(base);
+    const startBounds = getMonthBoundsFromKey(yearKeys[0]);
+    const endBounds = getMonthBoundsFromKey(yearKeys[yearKeys.length - 1]);
+    if (startBounds && endBounds) return {start: startBounds.start, end: endBounds.end};
+  }
+  return {start: base, end: addDays(base, 4)};
+}
+
+function getOnsitePeriodLabel(view = currentView) {
+  if (view === 'monthly') return 'this month';
+  if (view === 'quarterly') return 'this quarter';
+  if (view === 'yearly') return 'this fiscal year';
+  return 'this week';
+}
+
 function getStdHoursFromRangeOverrides(lab, periodStart, periodEnd) {
   if (!periodStart || !periodEnd) return null;
   const targetKey = normalizeLabForMatch(lab.lab);
@@ -941,8 +968,7 @@ function initStdUploadModal() {
   });
 }
 
-function getTechDaysLost(weekStart) {
-  const weekEnd = addDays(weekStart, 4);
+function getTechDaysLostInRange(rangeStart, rangeEnd, allowedLabs = null) {
   const lost = {};
   for (const row of scheduleRows) {
     const labRaw = row['Lab'] || row['lab'] || '';
@@ -953,10 +979,16 @@ function getTechDaysLost(weekStart) {
     if (!start || !end) continue;
     const labName = resolveLabName(labRaw);
     if (!labName) continue;
-    const days = workdaysInRange(start, end, weekStart, weekEnd);
+    if (allowedLabs && !allowedLabs.has(labName)) continue;
+    const days = workdaysInRange(start, end, rangeStart, rangeEnd);
     if (days > 0) lost[labName] = (lost[labName]||0) + numTechs * days;
   }
   return lost;
+}
+
+function getTechDaysLost(weekStart, allowedLabs = null) {
+  const weekEnd = addDays(weekStart, 4);
+  return getTechDaysLostInRange(weekStart, weekEnd, allowedLabs);
 }
 
 function shiftWeek(dir) { currentWeekStart = addDays(currentWeekStart, dir*7); recalc(); }
@@ -1040,8 +1072,7 @@ function updateStatusSummary() {
 function setView(view) {
   if (!VIEW_META[view]) return;
   currentView = view;
-  updateViewDecor();
-  renderTable();
+  recalc();
 }
 
 function ensureColHelpTip() {
@@ -1248,8 +1279,6 @@ function recalc() {
   const weekEnd = addDays(currentWeekStart, 4);
   document.getElementById('week-label').textContent = `${fmtDate(currentWeekStart)} – ${fmtDate(weekEnd)}`;
 
-  const techDaysLost = getTechDaysLost(currentWeekStart);
-  const totalOnsiteFTE = Object.values(techDaysLost).reduce((s,v)=>s+v,0) / daysPerWeek;
   const monthKey = getMonthKey(currentWeekStart);
   const quarterKeys = getFiscalQuarterMonthKeys(currentWeekStart);
   const yearKeys = getFiscalYearMonthKeys(currentWeekStart);
@@ -1259,6 +1288,12 @@ function recalc() {
   const activeLabs = BASE_LABS
     .filter(l => getStdHoursForLabWeek(l, currentWeekStart, weekEnd) != null)
     .filter(l => labMatchesPlatformFilter(l.lab));
+  const activeLabNames = new Set(activeLabs.map(l => l.lab));
+  const techDaysLost = getTechDaysLost(currentWeekStart, activeLabNames);
+  const onsiteRange = getDateRangeForView(currentWeekStart, currentView);
+  const techDaysLostForView = getTechDaysLostInRange(onsiteRange.start, onsiteRange.end, activeLabNames);
+  const onsiteTechDaysForView = Object.values(techDaysLostForView).reduce((s, v) => s + v, 0);
+  const totalOnsiteFTE = onsiteTechDaysForView / daysPerWeek;
 
   labRows = activeLabs.map(l => {
     const stdHours = getStdHoursForLabWeek(l, currentWeekStart, weekEnd);
@@ -1319,16 +1354,18 @@ function recalc() {
   });
 
   document.getElementById('m-onsite').textContent = totalOnsiteFTE.toFixed(1);
+  const onsiteSubEl = document.getElementById('m-onsite-sub');
+  if (onsiteSubEl) onsiteSubEl.textContent = `FTE equivalent ${getOnsitePeriodLabel(currentView)}`;
 
   const hasOnsite = scheduleRows.length > 0;
-  const weekOnsiteEntries = Object.values(techDaysLost).reduce((s,v)=>s+v,0);
+  const onsitePeriodLabel = getOnsitePeriodLabel(currentView);
   const onsiteText = !hasOnsite
     ? (schedulePersistenceEnabled
-      ? 'No onsite entries stored for this week'
+      ? `No onsite entries stored for ${onsitePeriodLabel}`
       : 'No schedule loaded — using base headcount')
-    : weekOnsiteEntries > 0
-      ? `${weekOnsiteEntries.toFixed(0)} tech-days on onsite this week`
-      : 'No onsite entries for this week';
+    : onsiteTechDaysForView > 0
+      ? `${onsiteTechDaysForView.toFixed(0)} tech-days on onsite ${onsitePeriodLabel}`
+      : `No onsite entries for ${onsitePeriodLabel}`;
   const hcText = hasHeadcountData
     ? `Headcount basis: ${monthKey}${headcountSourceName ? ` · ${headcountSourceName}` : ''}`
     : 'Headcount basis: static baseline';
