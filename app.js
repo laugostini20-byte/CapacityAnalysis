@@ -1629,7 +1629,7 @@ function getDisplayMetricsForRow(row, {useScenario = false} = {}) {
   if (!useScenario || !scenarioModel.enabled) return {...baseline, baseline: null, inScope: false};
   const scenarioRow = scenarioRowsByLab.get(row.lab);
   if (!scenarioRow) return {...baseline, baseline: null, inScope: false};
-  return {...scenarioRow, baseline};
+  return {...scenarioRow, baseline: scenarioRow.projectedBaseline ?? baseline};
 }
 
 function getStatusFromUtil(util) {
@@ -1726,15 +1726,17 @@ function computeScenarioRows(context) {
     const scenarioBaseTech = Math.max(0, row.baseTech + hcDelta);
     const scenarioLostFTE = Math.max(0, row.lostFTE + onsiteTechDelta);
     const scenarioAvail = Math.max(0, scenarioBaseTech - scenarioLostFTE);
-    const scenarioWeeklyStd = Math.max(0, row.wDemand + stdHoursDelta);
-    const weeklyDelta = stdHoursDelta;
-    const scenarioDemand = currentView === 'monthly'
-      ? (scenarioWeeklyStd * context.weeksPerMo)
+
+    // Always project demand from the current week's base std hours — never use per-month historical data
+    const demandScale = currentView === 'monthly'
+      ? context.weeksPerMo
       : currentView === 'quarterly'
-        ? Math.max(0, row.qDemand + (weeklyDelta * context.weeksPerMo * context.quarterMonthCount))
+        ? context.weeksPerMo * context.quarterMonthCount
         : currentView === 'yearly'
-          ? Math.max(0, row.yDemand + (weeklyDelta * context.weeksPerMo * context.yearMonthCount))
-          : scenarioWeeklyStd;
+          ? context.weeksPerMo * context.yearMonthCount
+          : 1;
+    const projectedBaselineDemand = row.wDemand * demandScale;
+    const scenarioDemand = Math.max(0, (row.wDemand + stdHoursDelta) * demandScale);
 
     const scenarioWCap = scenarioAvail * effectiveHrsPerDay * context.daysPerWeek;
     const scenarioMCap = Math.max(0, row.hcMonth + hcDelta) * monthCapPerFte;
@@ -1751,6 +1753,18 @@ function computeScenarioRows(context) {
     const scenarioGap = scenarioCap - scenarioDemand;
     const scenarioUtil = scenarioDemand > 0 && scenarioCap > 0 ? (scenarioDemand / scenarioCap) : null;
 
+    // Build a projected baseline so the "Base X · ΔY" sub-text also uses the current base number
+    const projectedBaselineGap = baseline.cap - projectedBaselineDemand;
+    const projectedBaselineUtil = projectedBaselineDemand > 0 && baseline.cap > 0
+      ? projectedBaselineDemand / baseline.cap : null;
+    const projectedBaseline = {
+      ...baseline,
+      demand: projectedBaselineDemand,
+      gap: projectedBaselineGap,
+      util: projectedBaselineUtil,
+      status: getStatusFromUtil(projectedBaselineUtil)
+    };
+
     scenarioRowsByLab.set(row.lab, {
       demand: scenarioDemand,
       historicalDemand: baseline.historicalDemand,
@@ -1761,7 +1775,8 @@ function computeScenarioRows(context) {
       baseTech: scenarioBaseTech,
       lostFTE: scenarioLostFTE,
       avail: scenarioAvail,
-      inScope: true
+      inScope: true,
+      projectedBaseline
     });
   });
 
