@@ -374,27 +374,6 @@
     transition: border-color 0.15s;
   }
   .filter-select:focus { outline: none; border-color: var(--blue); }
-  .platform-toggle-btn {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--white);
-    color: var(--text);
-    padding: 8px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s, color 0.15s;
-  }
-  .platform-toggle-btn:hover {
-    border-color: var(--blue);
-    color: var(--blue);
-    background: var(--light-blue);
-  }
-  .platform-toggle-btn.active {
-    background: var(--blue);
-    color: var(--white);
-    border-color: var(--blue);
-  }
   .row-count {
     font-size: 12px;
     color: var(--muted);

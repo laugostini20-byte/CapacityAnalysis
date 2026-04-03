@@ -69,10 +69,11 @@ let sortDir = 1;
 let colHelpTipEl = null;
 let currentView = 'weekly';
 let currentThresh = 0.85;
-let showIndysoftLabs = false;
+let platformFilterMode = 'caltrak';
 let selectedLabNames = new Set();
 let labPickerInitialized = false;
 let labPickerSearchTerm = '';
+let selectAllVisibleLabsOnNextRender = false;
 let stdHoursOverrides = {};
 const DEFAULT_STD_HOURS_BY_MONTH = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined'
   ? HARDCODED_STD_HOURS_BY_MONTH
@@ -265,16 +266,21 @@ function getLabPlatform(labName) {
   return INDYSOFT_LABS.has(labName) ? 'Indysoft' : 'CalTrak';
 }
 
-function updatePlatformToggleButton() {
-  const btn = document.getElementById('platform-toggle-btn');
-  if (!btn) return;
-  btn.textContent = showIndysoftLabs ? 'Hide Indysoft' : 'Show Indysoft';
-  btn.classList.toggle('active', showIndysoftLabs);
+function labMatchesPlatformFilter(labName) {
+  const platform = getLabPlatform(labName);
+  if (platformFilterMode === 'all') return true;
+  if (platformFilterMode === 'indysoft') return platform === 'Indysoft';
+  return platform === 'CalTrak';
 }
 
-function toggleIndysoftLabs() {
-  showIndysoftLabs = !showIndysoftLabs;
-  updatePlatformToggleButton();
+function onPlatformFilterChange() {
+  const currentlyVisibleLabs = getAvailableLabNames();
+  const hadAllVisibleSelected = currentlyVisibleLabs.length > 0
+    && currentlyVisibleLabs.every(name => selectedLabNames.has(name));
+  selectAllVisibleLabsOnNextRender = hadAllVisibleSelected;
+  const selectEl = document.getElementById('f-platform');
+  const nextMode = selectEl ? String(selectEl.value || 'caltrak').toLowerCase() : 'caltrak';
+  platformFilterMode = ['caltrak', 'indysoft', 'all'].includes(nextMode) ? nextMode : 'caltrak';
   recalc();
 }
 
@@ -303,6 +309,12 @@ function updateLabPickerSummary(availableLabNames = getAvailableLabNames()) {
 }
 
 function syncLabPickerSelection(availableLabNames) {
+  if (selectAllVisibleLabsOnNextRender) {
+    selectedLabNames = new Set(availableLabNames);
+    selectAllVisibleLabsOnNextRender = false;
+    labPickerInitialized = true;
+    return;
+  }
   const availableSet = new Set(availableLabNames);
   const filteredSelected = [...selectedLabNames].filter(name => availableSet.has(name));
   if (!labPickerInitialized) {
@@ -1246,7 +1258,7 @@ function recalc() {
 
   const activeLabs = BASE_LABS
     .filter(l => getStdHoursForLabWeek(l, currentWeekStart, weekEnd) != null)
-    .filter(l => showIndysoftLabs || getLabPlatform(l.lab) === 'CalTrak');
+    .filter(l => labMatchesPlatformFilter(l.lab));
 
   labRows = activeLabs.map(l => {
     const stdHours = getStdHoursForLabWeek(l, currentWeekStart, weekEnd);
@@ -1423,7 +1435,8 @@ async function initApp() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeLabPickerMenu();
   });
-  updatePlatformToggleButton();
+  const platformSelect = document.getElementById('f-platform');
+  if (platformSelect) platformSelect.value = platformFilterMode;
   setSort('status');
   recalc();
   try {
