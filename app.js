@@ -74,6 +74,22 @@ let selectedLabNames = new Set();
 let labPickerInitialized = false;
 let labPickerSearchTerm = '';
 let selectAllVisibleLabsOnNextRender = false;
+let scenarioProfiles = [];
+let scenarioPersistenceEnabled = false;
+let scenarioRowsByLab = new Map();
+let scenarioAggregate = null;
+const defaultScenarioModel = () => ({
+  id: null,
+  name: '',
+  enabled: false,
+  scopeType: 'all',
+  scopePlatform: 'caltrak',
+  onsitePct: 0,
+  productivityPct: 0,
+  headcountDelta: 0,
+  demandPct: 0
+});
+let scenarioModel = defaultScenarioModel();
 let stdHoursOverrides = {};
 const DEFAULT_STD_HOURS_BY_MONTH = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined'
   ? HARDCODED_STD_HOURS_BY_MONTH
@@ -266,6 +282,108 @@ function getLabPlatform(labName) {
   return INDYSOFT_LABS.has(labName) ? 'Indysoft' : 'CalTrak';
 }
 
+function normalizeScenarioConfig(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const toNum = (v, fallback = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const scopeType = String(src.scopeType || 'all').toLowerCase();
+  const scopePlatform = String(src.scopePlatform || 'caltrak').toLowerCase();
+  return {
+    enabled: Boolean(src.enabled),
+    scopeType: ['all', 'platform', 'selection'].includes(scopeType) ? scopeType : 'all',
+    scopePlatform: ['caltrak', 'indysoft'].includes(scopePlatform) ? scopePlatform : 'caltrak',
+    onsitePct: toNum(src.onsitePct, 0),
+    productivityPct: toNum(src.productivityPct, 0),
+    headcountDelta: toNum(src.headcountDelta, 0),
+    demandPct: toNum(src.demandPct, 0)
+  };
+}
+
+function isScenarioScopeMatch(row) {
+  if (!scenarioModel.enabled) return false;
+  if (scenarioModel.scopeType === 'all') return true;
+  if (scenarioModel.scopeType === 'platform') {
+    const want = scenarioModel.scopePlatform === 'indysoft' ? 'Indysoft' : 'CalTrak';
+    return row.platform === want;
+  }
+  if (scenarioModel.scopeType === 'selection') return selectedLabNames.has(row.lab);
+  return false;
+}
+
+function getScenarioProfileNameFallback() {
+  const stamp = new Date().toLocaleString();
+  return `Scenario ${stamp}`;
+}
+
+function updateScenarioControls() {
+  const enabledEl = document.getElementById('s-enabled');
+  const nameEl = document.getElementById('s-name');
+  const scopeTypeEl = document.getElementById('s-scope-type');
+  const scopePlatformEl = document.getElementById('s-scope-platform');
+  const onsiteEl = document.getElementById('s-onsite-pct');
+  const prodEl = document.getElementById('s-prod-pct');
+  const hcEl = document.getElementById('s-headcount-delta');
+  const demandEl = document.getElementById('s-demand-pct');
+  const scopePlatformWrap = document.getElementById('s-scope-platform-wrap');
+  const noteEl = document.getElementById('scenario-note');
+  const profileEl = document.getElementById('s-profile');
+  if (!enabledEl || !nameEl || !scopeTypeEl || !scopePlatformEl || !onsiteEl || !prodEl || !hcEl || !demandEl || !scopePlatformWrap || !noteEl || !profileEl) return;
+
+  enabledEl.checked = Boolean(scenarioModel.enabled);
+  nameEl.value = scenarioModel.name || '';
+  scopeTypeEl.value = scenarioModel.scopeType || 'all';
+  scopePlatformEl.value = scenarioModel.scopePlatform || 'caltrak';
+  onsiteEl.value = String(scenarioModel.onsitePct ?? 0);
+  prodEl.value = String(scenarioModel.productivityPct ?? 0);
+  hcEl.value = String(scenarioModel.headcountDelta ?? 0);
+  demandEl.value = String(scenarioModel.demandPct ?? 0);
+  profileEl.value = scenarioModel.id != null ? String(scenarioModel.id) : '';
+  scopePlatformWrap.style.display = (scenarioModel.scopeType === 'platform') ? '' : 'none';
+
+  const modeText = scenarioModel.scopeType === 'all'
+    ? 'all labs'
+    : scenarioModel.scopeType === 'platform'
+      ? `${scenarioModel.scopePlatform === 'indysoft' ? 'Indysoft' : 'CalTrak'} labs`
+      : 'selected labs from the lab picker';
+  noteEl.textContent = scenarioModel.enabled
+    ? `Scenario is active for ${modeText}. Baseline data is unchanged.`
+    : 'Scenario mode is off. Enable it to run what-if tests without changing baseline data.';
+}
+
+function setScenarioModelFromControls({recalcNow = true} = {}) {
+  const enabledEl = document.getElementById('s-enabled');
+  const nameEl = document.getElementById('s-name');
+  const scopeTypeEl = document.getElementById('s-scope-type');
+  const scopePlatformEl = document.getElementById('s-scope-platform');
+  const onsiteEl = document.getElementById('s-onsite-pct');
+  const prodEl = document.getElementById('s-prod-pct');
+  const hcEl = document.getElementById('s-headcount-delta');
+  const demandEl = document.getElementById('s-demand-pct');
+
+  const parsed = normalizeScenarioConfig({
+    enabled: enabledEl ? enabledEl.checked : false,
+    scopeType: scopeTypeEl ? scopeTypeEl.value : 'all',
+    scopePlatform: scopePlatformEl ? scopePlatformEl.value : 'caltrak',
+    onsitePct: onsiteEl ? onsiteEl.value : 0,
+    productivityPct: prodEl ? prodEl.value : 0,
+    headcountDelta: hcEl ? hcEl.value : 0,
+    demandPct: demandEl ? demandEl.value : 0
+  });
+  scenarioModel = {
+    ...scenarioModel,
+    ...parsed,
+    name: nameEl ? String(nameEl.value || '').trim() : scenarioModel.name
+  };
+  updateScenarioControls();
+  if (recalcNow) recalc();
+}
+
+function onScenarioControlChange(recalcNow = true) {
+  setScenarioModelFromControls({recalcNow});
+}
+
 function labMatchesPlatformFilter(labName) {
   const platform = getLabPlatform(labName);
   if (platformFilterMode === 'all') return true;
@@ -370,21 +488,24 @@ function toggleLabSelection(labName, isSelected) {
   if (isSelected) selectedLabNames.add(labName);
   else selectedLabNames.delete(labName);
   updateLabPickerSummary();
-  renderTable();
+  if (scenarioModel.enabled && scenarioModel.scopeType === 'selection') recalc();
+  else renderTable();
 }
 
 function selectAllLabs(e) {
   if (e) e.stopPropagation();
   selectedLabNames = new Set(getAvailableLabNames());
   renderLabPickerOptions();
-  renderTable();
+  if (scenarioModel.enabled && scenarioModel.scopeType === 'selection') recalc();
+  else renderTable();
 }
 
 function deselectAllLabs(e) {
   if (e) e.stopPropagation();
   selectedLabNames.clear();
   renderLabPickerOptions();
-  renderTable();
+  if (scenarioModel.enabled && scenarioModel.scopeType === 'selection') recalc();
+  else renderTable();
 }
 
 function onLabPickerSearchInput(value) {
@@ -869,6 +990,185 @@ async function trySyncStdHoursToApi(file, effectiveFrom, effectiveTo) {
   return res.json();
 }
 
+function rowsFromScenarioApi(scenarios) {
+  return (scenarios || []).map(row => ({
+    id: Number(row.id),
+    name: String(row.name || '').trim(),
+    config: normalizeScenarioConfig(row.config || {}),
+    createdAt: row.createdAt || null,
+    updatedAt: row.updatedAt || null
+  })).filter(row => Number.isInteger(row.id) && row.id > 0 && row.name);
+}
+
+async function fetchPersistedScenarios() {
+  let res;
+  try {
+    res = await fetch('/api/scenarios', {headers: {Accept: 'application/json'}});
+  } catch (_err) {
+    return null;
+  }
+  if (res.status === 404 || res.status === 503) return null;
+  if (!res.ok) {
+    let msg = `Scenario fetch failed (${res.status})`;
+    try {
+      const payload = await res.json();
+      if (payload && payload.error) msg = payload.error;
+    } catch (_err) {}
+    throw new Error(msg);
+  }
+  const payload = await res.json();
+  if (!payload || !Array.isArray(payload.scenarios)) return [];
+  return rowsFromScenarioApi(payload.scenarios);
+}
+
+async function saveScenarioToApi(profile) {
+  let res;
+  try {
+    res = await fetch('/api/scenarios', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+      body: JSON.stringify(profile)
+    });
+  } catch (_err) {
+    return null;
+  }
+  if (res.status === 404 || res.status === 503) return null;
+  if (!res.ok) {
+    let msg = `Scenario save failed (${res.status})`;
+    try {
+      const payload = await res.json();
+      if (payload && payload.error) msg = payload.error;
+    } catch (_err) {}
+    throw new Error(msg);
+  }
+  const payload = await res.json();
+  if (!payload || !payload.scenario) return null;
+  const saved = rowsFromScenarioApi([payload.scenario])[0];
+  return saved || null;
+}
+
+async function deleteScenarioFromApi(id) {
+  let res;
+  try {
+    res = await fetch(`/api/scenarios/${id}`, {method: 'DELETE', headers: {Accept: 'application/json'}});
+  } catch (_err) {
+    return null;
+  }
+  if (res.status === 404 || res.status === 503) return null;
+  if (!res.ok) {
+    let msg = `Scenario delete failed (${res.status})`;
+    try {
+      const payload = await res.json();
+      if (payload && payload.error) msg = payload.error;
+    } catch (_err) {}
+    throw new Error(msg);
+  }
+  return true;
+}
+
+function renderScenarioProfileOptions() {
+  const selectEl = document.getElementById('s-profile');
+  if (!selectEl) return;
+  const currentId = scenarioModel.id != null ? String(scenarioModel.id) : '';
+  const options = ['<option value="">Saved scenarios</option>']
+    .concat(
+      scenarioProfiles
+        .slice()
+        .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+        .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`)
+    );
+  selectEl.innerHTML = options.join('');
+  selectEl.value = currentId;
+}
+
+async function loadPersistedScenarios({silent = false} = {}) {
+  const rows = await fetchPersistedScenarios();
+  if (rows == null) return false;
+  scenarioProfiles = rows;
+  scenarioPersistenceEnabled = true;
+  renderScenarioProfileOptions();
+  if (!silent) {
+    const noteEl = document.getElementById('scenario-note');
+    if (noteEl) noteEl.textContent = `Loaded ${rows.length} saved scenarios from database.`;
+  }
+  return true;
+}
+
+function onScenarioProfileSelect() {
+  const selectEl = document.getElementById('s-profile');
+  if (!selectEl) return;
+  const selectedId = Number.parseInt(selectEl.value, 10);
+  if (!Number.isInteger(selectedId)) {
+    scenarioModel.id = null;
+    updateScenarioControls();
+    return;
+  }
+  const profile = scenarioProfiles.find(p => p.id === selectedId);
+  if (!profile) return;
+  scenarioModel = {
+    ...defaultScenarioModel(),
+    ...normalizeScenarioConfig(profile.config || {}),
+    id: profile.id,
+    name: profile.name,
+    enabled: true
+  };
+  updateScenarioControls();
+  recalc();
+}
+
+async function saveScenarioProfile() {
+  setScenarioModelFromControls({recalcNow: false});
+  const name = scenarioModel.name || getScenarioProfileNameFallback();
+  const payload = {
+    id: scenarioModel.id,
+    name,
+    config: normalizeScenarioConfig(scenarioModel)
+  };
+
+  const saved = await saveScenarioToApi(payload);
+  if (saved) {
+    scenarioPersistenceEnabled = true;
+    const idx = scenarioProfiles.findIndex(p => p.id === saved.id);
+    if (idx >= 0) scenarioProfiles[idx] = saved;
+    else scenarioProfiles.push(saved);
+    scenarioModel.id = saved.id;
+    scenarioModel.name = saved.name;
+  } else {
+    const fallbackId = scenarioModel.id != null ? scenarioModel.id : -(Date.now());
+    const fallback = {
+      id: fallbackId,
+      name,
+      config: normalizeScenarioConfig(scenarioModel),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const idx = scenarioProfiles.findIndex(p => p.id === fallbackId);
+    if (idx >= 0) scenarioProfiles[idx] = fallback;
+    else scenarioProfiles.push(fallback);
+    scenarioModel.id = fallbackId;
+    scenarioModel.name = name;
+    scenarioPersistenceEnabled = false;
+  }
+
+  renderScenarioProfileOptions();
+  updateScenarioControls();
+  recalc();
+}
+
+async function deleteScenarioProfile() {
+  const selectEl = document.getElementById('s-profile');
+  const selectedId = scenarioModel.id != null ? scenarioModel.id : Number.parseInt(selectEl ? selectEl.value : '', 10);
+  if (!Number.isInteger(selectedId)) return;
+
+  const removedFromApi = selectedId > 0 ? await deleteScenarioFromApi(selectedId) : false;
+  if (removedFromApi) scenarioPersistenceEnabled = true;
+  scenarioProfiles = scenarioProfiles.filter(p => p.id !== selectedId);
+  scenarioModel = {...defaultScenarioModel(), enabled: false};
+  renderScenarioProfileOptions();
+  updateScenarioControls();
+  recalc();
+}
+
 function setStdUploadModalOpen(open) {
   const modal = document.getElementById('std-upload-modal');
   if (!modal) return;
@@ -1021,6 +1321,31 @@ function getUtilForView(row) {
   return row[getActiveViewMeta().utilKey];
 }
 
+function getBaselineMetricsForRow(row) {
+  const demand = getDemandForView(row);
+  const cap = getCapForView(row);
+  const gap = getGapForView(row);
+  const util = getUtilForView(row);
+  return {
+    demand,
+    cap,
+    gap,
+    util,
+    status: getStatusFromUtil(util),
+    baseTech: row.baseTech,
+    lostFTE: row.lostFTE,
+    avail: row.avail
+  };
+}
+
+function getDisplayMetricsForRow(row) {
+  const baseline = getBaselineMetricsForRow(row);
+  if (!scenarioModel.enabled) return {...baseline, baseline: null, inScope: false};
+  const scenarioRow = scenarioRowsByLab.get(row.lab);
+  if (!scenarioRow) return {...baseline, baseline: null, inScope: false};
+  return {...scenarioRow, baseline};
+}
+
 function getStatusFromUtil(util) {
   if (util == null) return 'ok';
   if (util > 1) return 'over';
@@ -1058,15 +1383,117 @@ function updateViewDecor() {
   });
 }
 
+function computeScenarioRows(context) {
+  scenarioRowsByLab = new Map();
+  scenarioAggregate = null;
+  if (!scenarioModel.enabled) return;
+
+  const onsiteMult = 1 + (scenarioModel.onsitePct / 100);
+  const prodMult = 1 + (scenarioModel.productivityPct / 100);
+  const demandMult = 1 + (scenarioModel.demandPct / 100);
+  const hcDelta = scenarioModel.headcountDelta;
+  const effectiveHrsPerDay = context.hrsPerDay * prodMult;
+  const monthCapPerFte = effectiveHrsPerDay * context.daysPerWeek * context.weeksPerMo;
+
+  let scenarioOnsiteTechDays = 0;
+  Object.entries(context.techDaysLostForView).forEach(([labName, techDays]) => {
+    const row = context.rowByLab.get(labName);
+    const inScope = row ? isScenarioScopeMatch(row) : false;
+    scenarioOnsiteTechDays += inScope ? (techDays * onsiteMult) : techDays;
+  });
+
+  labRows.forEach(row => {
+    const inScope = isScenarioScopeMatch(row);
+    const baseline = getBaselineMetricsForRow(row);
+
+    if (!inScope) {
+      scenarioRowsByLab.set(row.lab, {...baseline, inScope: false});
+      return;
+    }
+
+    const scenarioBaseTech = Math.max(0, row.baseTech + hcDelta);
+    const scenarioLostFTE = Math.max(0, row.lostFTE * onsiteMult);
+    const scenarioAvail = Math.max(0, scenarioBaseTech - scenarioLostFTE);
+    const scenarioDemand = Math.max(0, baseline.demand * demandMult);
+
+    const scenarioWCap = scenarioAvail * effectiveHrsPerDay * context.daysPerWeek;
+    const scenarioMCap = Math.max(0, row.hcMonth + hcDelta) * monthCapPerFte;
+    const scenarioQCap = Math.max(0, row.hcQuarterSum + (hcDelta * context.quarterMonthCount)) * monthCapPerFte;
+    const scenarioYCap = Math.max(0, row.hcYearSum + (hcDelta * context.yearMonthCount)) * monthCapPerFte;
+    const scenarioCap = currentView === 'monthly'
+      ? scenarioMCap
+      : currentView === 'quarterly'
+        ? scenarioQCap
+        : currentView === 'yearly'
+          ? scenarioYCap
+          : scenarioWCap;
+
+    const scenarioGap = scenarioCap - scenarioDemand;
+    const scenarioUtil = scenarioDemand > 0 && scenarioCap > 0 ? (scenarioDemand / scenarioCap) : null;
+
+    scenarioRowsByLab.set(row.lab, {
+      demand: scenarioDemand,
+      cap: scenarioCap,
+      gap: scenarioGap,
+      util: scenarioUtil,
+      status: getStatusFromUtil(scenarioUtil),
+      baseTech: scenarioBaseTech,
+      lostFTE: scenarioLostFTE,
+      avail: scenarioAvail,
+      inScope: true
+    });
+  });
+
+  scenarioAggregate = {
+    baselineOnsiteFTE: context.baselineOnsiteFTE,
+    scenarioOnsiteFTE: scenarioOnsiteTechDays / context.daysPerWeek
+  };
+}
+
+function updateScenarioImpact(selectedRows) {
+  const impactEl = document.getElementById('scenario-impact');
+  if (!impactEl) return;
+  if (!scenarioModel.enabled || !selectedRows.length) {
+    impactEl.hidden = true;
+    return;
+  }
+
+  const baselineCounts = {over: 0, risk: 0, ok: 0};
+  const scenarioCounts = {over: 0, risk: 0, ok: 0};
+  selectedRows.forEach(row => {
+    const baseline = getBaselineMetricsForRow(row);
+    const display = getDisplayMetricsForRow(row);
+    baselineCounts[baseline.status] += 1;
+    scenarioCounts[display.status] += 1;
+  });
+
+  const baseOnsite = scenarioAggregate ? scenarioAggregate.baselineOnsiteFTE : 0;
+  const scenOnsite = scenarioAggregate ? scenarioAggregate.scenarioOnsiteFTE : baseOnsite;
+  const dOver = scenarioCounts.over - baselineCounts.over;
+  const dRisk = scenarioCounts.risk - baselineCounts.risk;
+  const dOk = scenarioCounts.ok - baselineCounts.ok;
+  const dOnsite = scenOnsite - baseOnsite;
+  const fmtDelta = v => `${v > 0 ? '+' : ''}${v}`;
+  const fmtDeltaFte = v => `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
+
+  impactEl.textContent =
+    `Scenario impact · Over ${baselineCounts.over} → ${scenarioCounts.over} (${fmtDelta(dOver)}) · ` +
+    `At risk ${baselineCounts.risk} → ${scenarioCounts.risk} (${fmtDelta(dRisk)}) · ` +
+    `Healthy ${baselineCounts.ok} → ${scenarioCounts.ok} (${fmtDelta(dOk)}) · ` +
+    `Onsite FTE ${baseOnsite.toFixed(1)} → ${scenOnsite.toFixed(1)} (${fmtDeltaFte(dOnsite)})`;
+  impactEl.hidden = false;
+}
+
 function updateStatusSummary() {
   const selectedRows = getSelectedRows();
-  const over = selectedRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'over').length;
-  const risk = selectedRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'risk').length;
-  const ok = selectedRows.filter(r => getStatusFromUtil(getUtilForView(r)) === 'ok').length;
+  const over = selectedRows.filter(r => getDisplayMetricsForRow(r).status === 'over').length;
+  const risk = selectedRows.filter(r => getDisplayMetricsForRow(r).status === 'risk').length;
+  const ok = selectedRows.filter(r => getDisplayMetricsForRow(r).status === 'ok').length;
   document.getElementById('m-total').textContent = selectedRows.length;
   document.getElementById('m-over').textContent = over;
   document.getElementById('m-risk').textContent = risk;
   document.getElementById('m-ok').textContent = ok;
+  updateScenarioImpact(selectedRows);
 }
 
 function setView(view) {
@@ -1289,6 +1716,8 @@ function recalc() {
     .filter(l => getStdHoursForLabWeek(l, currentWeekStart, weekEnd) != null)
     .filter(l => labMatchesPlatformFilter(l.lab));
   const activeLabNames = new Set(activeLabs.map(l => l.lab));
+  const activeLabList = [...activeLabNames].sort((a, b) => a.localeCompare(b));
+  syncLabPickerSelection(activeLabList);
   const techDaysLost = getTechDaysLost(currentWeekStart, activeLabNames);
   const onsiteRange = getDateRangeForView(currentWeekStart, currentView);
   const techDaysLostForView = getTechDaysLostInRange(onsiteRange.start, onsiteRange.end, activeLabNames);
@@ -1298,6 +1727,9 @@ function recalc() {
   labRows = activeLabs.map(l => {
     const stdHours = getStdHoursForLabWeek(l, currentWeekStart, weekEnd);
     const baseTech = getHeadcountForLabMonth(l, monthKey);
+    const hcMonth = getHeadcountForLabMonth(l, monthKey);
+    const hcQuarterSum = quarterKeys.reduce((s, k) => s + getHeadcountForLabMonth(l, k), 0);
+    const hcYearSum = yearKeys.reduce((s, k) => s + getHeadcountForLabMonth(l, k), 0);
     const lost    = techDaysLost[l.lab] || 0;
     const lostFTE = lost / daysPerWeek;
     const avail   = Math.max(0, baseTech - lostFTE);
@@ -1314,9 +1746,9 @@ function recalc() {
 
     const wCap    = avail * hrsPerDay * daysPerWeek;
     const monthCapPerFte = hrsPerDay * daysPerWeek * weeksPerMo;
-    const mCap    = getHeadcountForLabMonth(l, monthKey) * monthCapPerFte;
-    const qCap    = quarterKeys.reduce((s, k) => s + (getHeadcountForLabMonth(l, k) * monthCapPerFte), 0);
-    const yCap    = yearKeys.reduce((s, k) => s + (getHeadcountForLabMonth(l, k) * monthCapPerFte), 0);
+    const mCap    = hcMonth * monthCapPerFte;
+    const qCap    = hcQuarterSum * monthCapPerFte;
+    const yCap    = hcYearSum * monthCapPerFte;
 
     const wGap    = wCap - wDemand;
     const mGap    = mCap - mDemand;
@@ -1332,6 +1764,9 @@ function recalc() {
       ...l,
       platform: getLabPlatform(l.lab),
       baseTech,
+      hcMonth,
+      hcQuarterSum,
+      hcYearSum,
       lostFTE,
       avail,
       wDemand,
@@ -1353,9 +1788,28 @@ function recalc() {
     };
   });
 
-  document.getElementById('m-onsite').textContent = totalOnsiteFTE.toFixed(1);
+  const rowByLab = new Map(labRows.map(r => [r.lab, r]));
+  computeScenarioRows({
+    hrsPerDay,
+    daysPerWeek,
+    weeksPerMo,
+    quarterMonthCount: quarterKeys.length,
+    yearMonthCount: yearKeys.length,
+    baselineOnsiteFTE: totalOnsiteFTE,
+    techDaysLostForView,
+    rowByLab
+  });
+
+  const onsiteMetric = scenarioModel.enabled && scenarioAggregate
+    ? scenarioAggregate.scenarioOnsiteFTE
+    : totalOnsiteFTE;
+  document.getElementById('m-onsite').textContent = onsiteMetric.toFixed(1);
   const onsiteSubEl = document.getElementById('m-onsite-sub');
-  if (onsiteSubEl) onsiteSubEl.textContent = `FTE equivalent ${getOnsitePeriodLabel(currentView)}`;
+  if (onsiteSubEl) {
+    onsiteSubEl.textContent = scenarioModel.enabled && scenarioAggregate
+      ? `Scenario FTE ${getOnsitePeriodLabel(currentView)} (base ${scenarioAggregate.baselineOnsiteFTE.toFixed(1)})`
+      : `FTE equivalent ${getOnsitePeriodLabel(currentView)}`;
+  }
 
   const hasOnsite = scheduleRows.length > 0;
   const onsitePeriodLabel = getOnsitePeriodLabel(currentView);
@@ -1375,7 +1829,10 @@ function recalc() {
   const stdUploadText = stdHoursPersistenceEnabled && stdHoursRangeOverrides.length
     ? `Std uploads active: ${stdHoursRangeOverrides.length}`
     : 'Std uploads: none';
-  document.getElementById('week-sub').textContent = `${onsiteText} · ${hcText} · ${stdText} · ${stdUploadText}`;
+  const scenarioText = scenarioModel.enabled
+    ? `Scenario: ${(scenarioModel.name || 'Untitled').trim() || 'Untitled'}`
+    : 'Scenario: off';
+  document.getElementById('week-sub').textContent = `${onsiteText} · ${hcText} · ${stdText} · ${stdUploadText} · ${scenarioText}`;
 
   updateViewDecor();
   renderLabPickerOptions();
@@ -1387,23 +1844,25 @@ function renderTable() {
 
   let rows = getSelectedRows();
   updateStatusSummary();
-  if (fs !== 'all') rows = rows.filter(r => getStatusFromUtil(getUtilForView(r)) === fs);
+  if (fs !== 'all') rows = rows.filter(r => getDisplayMetricsForRow(r).status === fs);
 
   const statusOrder = {over:0, risk:1, ok:2};
   rows.sort((a,b) => {
+    const am = getDisplayMetricsForRow(a);
+    const bm = getDisplayMetricsForRow(b);
     let av, bv;
     if (sortKey==='status')    {
-      av = statusOrder[getStatusFromUtil(getUtilForView(a))];
-      bv = statusOrder[getStatusFromUtil(getUtilForView(b))];
+      av = statusOrder[am.status];
+      bv = statusOrder[bm.status];
     }
     else if (sortKey==='name') { return sortDir * a.lab.localeCompare(b.lab); }
-    else if (sortKey==='headcount') { av=a.baseTech; bv=b.baseTech; }
-    else if (sortKey==='util') { av=getUtilForView(a)??-1; bv=getUtilForView(b)??-1; }
-    else if (sortKey==='gap')  { av=getGapForView(a); bv=getGapForView(b); }
-    else if (sortKey==='onsite'){av=a.lostFTE; bv=b.lostFTE; }
+    else if (sortKey==='headcount') { av=am.baseTech; bv=bm.baseTech; }
+    else if (sortKey==='util') { av=am.util ?? -1; bv=bm.util ?? -1; }
+    else if (sortKey==='gap')  { av=am.gap; bv=bm.gap; }
+    else if (sortKey==='onsite'){av=am.lostFTE; bv=bm.lostFTE; }
     else {
-      av = statusOrder[getStatusFromUtil(getUtilForView(a))];
-      bv = statusOrder[getStatusFromUtil(getUtilForView(b))];
+      av = statusOrder[am.status];
+      bv = statusOrder[bm.status];
     }
     if (sortKey === 'status') return sortDir * (av - bv);
     return sortDir * (bv - av);
@@ -1423,11 +1882,13 @@ function renderTable() {
   }
 
   body.innerHTML = rows.map(r => {
-    const demand = getDemandForView(r);
-    const cap = getCapForView(r);
-    const gap = getGapForView(r);
-    const util = getUtilForView(r);
-    const status = getStatusFromUtil(util);
+    const display = getDisplayMetricsForRow(r);
+    const baseline = display.baseline;
+    const demand = display.demand;
+    const cap = display.cap;
+    const gap = display.gap;
+    const util = display.util;
+    const status = display.status;
 
     const utilPct  = util != null ? Math.round(util * 100) : null;
     const barPct   = utilPct != null ? Math.min(utilPct, 100) : 0;
@@ -1435,31 +1896,49 @@ function renderTable() {
     const utilColor= status==='over' ? 'num-red'  : status==='risk' ? 'num-amber' : 'num-green';
     const gapStr   = gap != null ? (gap>=0?'+':'')+Math.round(gap)+' hrs' : '—';
     const gapCls   = gap < 0 ? 'num-red' : gap < cap*0.15 ? 'num-amber' : 'num-green';
-    const lostDisp = r.lostFTE > 0
-      ? `<span class="num-red">${r.lostFTE.toFixed(1)}</span>`
+    const lostDisp = display.lostFTE > 0
+      ? `<span class="num-red">${display.lostFTE.toFixed(1)}</span>`
       : '<span class="num-muted">—</span>';
-    const availDisp= r.lostFTE > 0
-      ? `<span class="num-amber">${r.avail.toFixed(1)}</span>`
-      : `${r.baseTech}`;
+    const availDisp= display.lostFTE > 0
+      ? `<span class="num-amber">${display.avail.toFixed(1)}</span>`
+      : `${display.baseTech}`;
+    const scenarioDeltaText = (currentValue, baselineValue, formatter, suffix = '') => {
+      if (!scenarioModel.enabled || !display.inScope || baselineValue == null || currentValue == null) return '';
+      const delta = currentValue - baselineValue;
+      const deltaStr = `${delta > 0 ? '+' : ''}${suffix === '%' ? Math.round(delta) : Math.round(delta)}${suffix}`;
+      return `<span class="num-sub">Base ${formatter(baselineValue)} · Δ ${deltaStr}</span>`;
+    };
+    const demandSub = baseline ? scenarioDeltaText(demand, baseline.demand, fmtHrs) : '';
+    const capSub = baseline ? scenarioDeltaText(cap, baseline.cap, fmtHrs) : '';
+    const gapSub = baseline ? scenarioDeltaText(gap, baseline.gap, v => `${v >= 0 ? '+' : ''}${Math.round(v)} hrs`) : '';
+    const headcountSub = baseline ? scenarioDeltaText(display.baseTech, baseline.baseTech, v => `${Math.round(v)}`) : '';
+    const onsiteSub = baseline ? scenarioDeltaText(display.lostFTE, baseline.lostFTE, v => v > 0 ? v.toFixed(1) : '—') : '';
+    const availSub = baseline ? scenarioDeltaText(display.avail, baseline.avail, v => Number.isInteger(v) ? `${v}` : v.toFixed(1)) : '';
+    const utilSub = (scenarioModel.enabled && display.inScope && baseline && baseline.util != null && util != null)
+      ? `<span class="num-sub">Base ${Math.round(baseline.util * 100)}% · Δ ${utilPct - Math.round(baseline.util * 100) > 0 ? '+' : ''}${utilPct - Math.round(baseline.util * 100)}%</span>`
+      : '';
     let badge = '';
     if (status==='over') badge='<span class="badge badge-over">&#9650; Over</span>';
     else if (status==='risk') badge='<span class="badge badge-risk">&#9888; At risk</span>';
     else badge='<span class="badge badge-ok">&#10003; Healthy</span>';
+    const statusSub = (scenarioModel.enabled && display.inScope && baseline && baseline.status !== status)
+      ? `<span class="num-sub">Base: ${baseline.status === 'over' ? 'Over' : baseline.status === 'risk' ? 'At risk' : 'Healthy'}</span>`
+      : '';
 
     return `<tr>
-      <td class="lab-name-cell"><div class="lab-name">${r.lab}</div><div class="platform-tag ${r.platform === 'Indysoft' ? 'platform-indysoft' : 'platform-caltrak'}">${r.platform}</div></td>
-      <td class="num">${r.baseTech}</td>
-      <td class="num">${lostDisp}</td>
-      <td class="num">${availDisp}</td>
-      <td class="num">${fmtHrs(demand)}</td>
-      <td class="num">${fmtHrs(cap)}</td>
-      <td class="num ${gapCls}">${gapStr}</td>
+      <td class="lab-name-cell"><div class="lab-name">${r.lab}</div><div class="platform-tag ${r.platform === 'Indysoft' ? 'platform-indysoft' : 'platform-caltrak'}">${r.platform}</div>${scenarioModel.enabled && display.inScope ? '<span class="num-sub">Scenario scope</span>' : ''}</td>
+      <td class="num">${Math.round(display.baseTech)}${headcountSub}</td>
+      <td class="num">${lostDisp}${onsiteSub}</td>
+      <td class="num">${availDisp}${availSub}</td>
+      <td class="num">${fmtHrs(demand)}${demandSub}</td>
+      <td class="num">${fmtHrs(cap)}${capSub}</td>
+      <td class="num ${gapCls}">${gapStr}${gapSub}</td>
       <td class="util-cell">${utilPct!=null?`
         <div class="util-wrap">
           <div class="util-pct ${utilColor}">${utilPct}%</div>
           <div class="bar-track"><div class="bar-fill ${barCls}" style="width:${barPct}%"></div></div>
-        </div>`:'—'}</td>
-      <td class="status-cell">${badge}</td>
+        </div>${utilSub}`:'—'}</td>
+      <td class="status-cell">${badge}${statusSub}</td>
     </tr>`;
   }).join('');
 }
@@ -1472,6 +1951,8 @@ async function initApp() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeLabPickerMenu();
   });
+  renderScenarioProfileOptions();
+  updateScenarioControls();
   const platformSelect = document.getElementById('f-platform');
   if (platformSelect) platformSelect.value = platformFilterMode;
   setSort('status');
@@ -1483,6 +1964,11 @@ async function initApp() {
   }
   try {
     await loadPersistedStdHours();
+  } catch (_err) {
+    // Keep local-only mode if API is unavailable.
+  }
+  try {
+    await loadPersistedScenarios({silent: true});
   } catch (_err) {
     // Keep local-only mode if API is unavailable.
   }

@@ -195,7 +195,8 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
-  .param input {
+  .param input,
+  .param select {
     flex: 0 0 auto;
     width: 100%;
     padding: 7px 10px;
@@ -206,7 +207,8 @@
     color: var(--text);
     transition: border-color 0.15s;
   }
-  .param input:focus { outline: none; border-color: var(--blue); }
+  .param input:focus,
+  .param select:focus { outline: none; border-color: var(--blue); }
   .recalc-btn {
     margin-top: 12px;
     padding: 8px 18px;
@@ -220,6 +222,67 @@
     transition: background 0.15s;
   }
   .recalc-btn:hover { background: var(--navy); }
+
+  .scenario-card .card-body { padding-top: 1rem; }
+  .scenario-toolbar {
+    display: grid;
+    grid-template-columns: auto minmax(220px, 1fr) minmax(180px, 220px) auto auto;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .scenario-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .scenario-toggle input { margin: 0; }
+  .scenario-name {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--white);
+    color: var(--text);
+  }
+  .scenario-name:focus { outline: none; border-color: var(--blue); }
+  .scenario-btn {
+    border: 1px solid var(--blue);
+    border-radius: var(--radius);
+    background: var(--blue);
+    color: var(--white);
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .scenario-btn:hover { background: var(--navy); border-color: var(--navy); }
+  .scenario-btn-light {
+    background: var(--white);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .scenario-btn-light:hover {
+    background: #f6f9fd;
+    color: var(--text);
+    border-color: var(--blue);
+  }
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(130px, 1fr));
+    gap: 10px;
+  }
+  .scenario-note {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
 
   /* ── Summary Metrics ── */
   .summary-grid {
@@ -255,6 +318,16 @@
   .metric-value.green { color: var(--green); }
   .metric-value.blue { color: var(--blue); }
   .metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .scenario-impact {
+    margin-bottom: 12px;
+    border: 1px solid #d8e3ef;
+    background: #f7fbff;
+    color: #274560;
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
 
   /* ── Table Controls ── */
   .table-controls {
@@ -501,6 +574,13 @@
   .num-amber { color: var(--amber); font-weight: 600; }
   .num-green { color: var(--green); }
   .num-muted { color: var(--muted); }
+  .num-sub {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    line-height: 1.25;
+  }
 
   /* ── Badges ── */
   .badge {
@@ -696,6 +776,8 @@
     .upload-grid { grid-template-columns: 1fr; }
     .summary-grid { grid-template-columns: repeat(3, 1fr); }
     .params-grid { grid-template-columns: repeat(2, 1fr); }
+    .scenario-toolbar { grid-template-columns: 1fr 1fr; }
+    .scenario-grid { grid-template-columns: repeat(2, 1fr); }
     .page { padding: 1rem 1rem 3rem; }
     .modal-grid { grid-template-columns: 1fr; }
   }

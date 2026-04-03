@@ -85,6 +85,60 @@
         <button class="recalc-btn" onclick="recalc()">↻ Recalculate</button>
       </div>
     </div>
+
+    <!-- Scenario Lab -->
+    <div class="card scenario-card">
+      <div class="card-body">
+        <div class="card-title">Scenario Lab</div>
+        <div class="scenario-toolbar">
+          <label class="scenario-toggle">
+            <input type="checkbox" id="s-enabled" onchange="onScenarioControlChange()">
+            <span>Enable scenario</span>
+          </label>
+          <input class="scenario-name" type="text" id="s-name" placeholder="Scenario name (example: Q2 onsite spike)" oninput="onScenarioControlChange(false)">
+          <select class="filter-select" id="s-profile" onchange="onScenarioProfileSelect()">
+            <option value="">Saved scenarios</option>
+          </select>
+          <button type="button" class="scenario-btn" onclick="saveScenarioProfile()">Save</button>
+          <button type="button" class="scenario-btn scenario-btn-light" onclick="deleteScenarioProfile()">Delete</button>
+        </div>
+
+        <div class="scenario-grid">
+          <div class="param">
+            <label>Scope</label>
+            <select id="s-scope-type" onchange="onScenarioControlChange()">
+              <option value="all">All labs</option>
+              <option value="platform">Platform</option>
+              <option value="selection">Selected labs</option>
+            </select>
+          </div>
+          <div class="param" id="s-scope-platform-wrap">
+            <label>Platform</label>
+            <select id="s-scope-platform" onchange="onScenarioControlChange()">
+              <option value="caltrak">CalTrak</option>
+              <option value="indysoft">Indysoft</option>
+            </select>
+          </div>
+          <div class="param">
+            <label>Onsite % change</label>
+            <input type="number" id="s-onsite-pct" value="0" step="1" oninput="onScenarioControlChange()">
+          </div>
+          <div class="param">
+            <label>Productivity % change</label>
+            <input type="number" id="s-prod-pct" value="0" step="1" oninput="onScenarioControlChange()">
+          </div>
+          <div class="param">
+            <label>Headcount delta (techs)</label>
+            <input type="number" id="s-headcount-delta" value="0" step="1" oninput="onScenarioControlChange()">
+          </div>
+          <div class="param">
+            <label>Demand % change</label>
+            <input type="number" id="s-demand-pct" value="0" step="1" oninput="onScenarioControlChange()">
+          </div>
+        </div>
+        <div class="scenario-note" id="scenario-note">Scenario mode is off. Enable it to run what-if tests without changing baseline data.</div>
+      </div>
+    </div>
   </div>
 
   <!-- ── Summary Metrics ── -->
@@ -115,6 +169,8 @@
       <div class="metric-sub">within capacity</div>
     </div>
   </div>
+
+  <div class="scenario-impact" id="scenario-impact" hidden>Scenario impact will appear here.</div>
 
   <!-- ── Table Controls ── -->
   <div class="table-controls">

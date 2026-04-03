@@ -38,3 +38,13 @@ CREATE TABLE IF NOT EXISTS std_hours_overrides (
 
 CREATE INDEX IF NOT EXISTS idx_std_hours_lab_key ON std_hours_overrides (lab_key);
 CREATE INDEX IF NOT EXISTS idx_std_hours_effective_dates ON std_hours_overrides (effective_from, effective_to);
+
+CREATE TABLE IF NOT EXISTS scenario_profiles (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scenario_profiles_updated ON scenario_profiles (updated_at DESC);
