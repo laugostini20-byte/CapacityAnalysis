@@ -94,7 +94,9 @@ const defaultScenarioModel = () => ({
   productivityPct: 0,
   headcountDelta: 0,
   demandPct: 0,
-  selectedLabs: []
+  selectedLabs: [],
+  view: 'weekly',
+  statusFilter: 'all'
 });
 let scenarioModel = defaultScenarioModel();
 let stdHoursOverrides = {};
@@ -298,6 +300,8 @@ function normalizeScenarioConfig(raw) {
   const selectedLabs = Array.isArray(src.selectedLabs)
     ? [...new Set(src.selectedLabs.map(v => String(v || '').trim()).filter(Boolean))]
     : [];
+  const view = String(src.view || 'weekly').toLowerCase();
+  const statusFilter = String(src.statusFilter || 'all').toLowerCase();
   const scopeType = String(src.scopeType || 'all').toLowerCase();
   const scopePlatform = String(src.scopePlatform || 'caltrak').toLowerCase();
   return {
@@ -308,7 +312,9 @@ function normalizeScenarioConfig(raw) {
     productivityPct: toNum(src.productivityPct, 0),
     headcountDelta: toNum(src.headcountDelta, 0),
     demandPct: toNum(src.demandPct, 0),
-    selectedLabs
+    selectedLabs,
+    view: ['weekly', 'monthly', 'quarterly', 'yearly'].includes(view) ? view : 'weekly',
+    statusFilter: ['all', 'over', 'risk', 'ok'].includes(statusFilter) ? statusFilter : 'all'
   };
 }
 
@@ -366,6 +372,7 @@ function updateScenarioControls() {
   const prodEl = document.getElementById('s-prod-pct');
   const hcEl = document.getElementById('s-headcount-delta');
   const demandEl = document.getElementById('s-demand-pct');
+  const statusFilterEl = document.getElementById('s-f-status');
   const scopePlatformWrap = document.getElementById('s-scope-platform-wrap');
   const noteEl = document.getElementById('scenario-note');
   const profileEl = document.getElementById('s-profile');
@@ -378,6 +385,7 @@ function updateScenarioControls() {
   if (prodEl) prodEl.value = String(scenarioModel.productivityPct ?? 0);
   if (hcEl) hcEl.value = String(scenarioModel.headcountDelta ?? 0);
   if (demandEl) demandEl.value = String(scenarioModel.demandPct ?? 0);
+  if (statusFilterEl) statusFilterEl.value = scenarioModel.statusFilter || 'all';
   if (profileEl) profileEl.value = scenarioModel.id != null ? String(scenarioModel.id) : '';
   if (scopePlatformWrap && scopeTypeEl) scopePlatformWrap.style.display = (scopeTypeEl.value === 'platform') ? '' : 'none';
 
@@ -400,6 +408,7 @@ function setScenarioModelFromControls({recalcNow = true} = {}) {
   const hcEl = document.getElementById('s-headcount-delta');
   const demandEl = document.getElementById('s-demand-pct');
 
+  const statusFilterEl = document.getElementById('s-f-status');
   const parsed = normalizeScenarioConfig({
     enabled: true,
     scopeType: 'selection',
@@ -408,7 +417,9 @@ function setScenarioModelFromControls({recalcNow = true} = {}) {
     productivityPct: prodEl ? prodEl.value : 0,
     headcountDelta: hcEl ? hcEl.value : 0,
     demandPct: demandEl ? demandEl.value : 0,
-    selectedLabs: [...scenarioSelectedLabNames]
+    selectedLabs: [...scenarioSelectedLabNames],
+    view: currentView,
+    statusFilter: statusFilterEl ? statusFilterEl.value : (scenarioModel.statusFilter || 'all')
   });
   scenarioModel = {
     ...scenarioModel,
@@ -421,6 +432,13 @@ function setScenarioModelFromControls({recalcNow = true} = {}) {
 
 function onScenarioControlChange(recalcNow = true) {
   setScenarioModelFromControls({recalcNow});
+}
+
+function onScenarioStatusFilterChange() {
+  const statusFilterEl = document.getElementById('s-f-status');
+  const next = statusFilterEl ? String(statusFilterEl.value || 'all').toLowerCase() : 'all';
+  scenarioModel.statusFilter = ['all', 'over', 'risk', 'ok'].includes(next) ? next : 'all';
+  renderScenarioTable();
 }
 
 function resetScenarioAnalysis() {
@@ -1318,6 +1336,9 @@ function onScenarioProfileSelect() {
     scenarioLabPickerInitialized = true;
     syncScenarioSelectionToModel();
   }
+  if (VIEW_META[scenarioModel.view]) currentView = scenarioModel.view;
+  const statusFilterEl = document.getElementById('s-f-status');
+  if (statusFilterEl) statusFilterEl.value = scenarioModel.statusFilter || 'all';
   updateScenarioControls();
   recalc();
 }
@@ -2232,7 +2253,8 @@ function renderScenarioTable() {
   const bodyEl = document.getElementById('s-tbl-body');
   if (!bodyEl) return;
   const fsEl = document.getElementById('s-f-status');
-  const fs = fsEl ? fsEl.value : 'all';
+  const fs = scenarioModel.statusFilter || (fsEl ? fsEl.value : 'all');
+  if (fsEl && fsEl.value !== fs) fsEl.value = fs;
   let rows = getScenarioSelectedRows();
   if (fs !== 'all') rows = rows.filter(r => getDisplayMetricsForRow(r, {useScenario: true}).status === fs);
   sortRowsForTable(rows, {useScenario: true});

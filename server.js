@@ -92,16 +92,24 @@ function normalizeScenarioConfig(raw) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
+  const selectedLabs = Array.isArray(src.selectedLabs)
+    ? [...new Set(src.selectedLabs.map(v => String(v || '').trim()).filter(Boolean))]
+    : [];
+  const view = String(src.view || 'weekly').toLowerCase();
+  const statusFilter = String(src.statusFilter || 'all').toLowerCase();
   const scopeType = String(src.scopeType || 'all').toLowerCase();
   const scopePlatform = String(src.scopePlatform || 'caltrak').toLowerCase();
   return {
     enabled: Boolean(src.enabled),
-    scopeType: ['all', 'platform', 'selection'].includes(scopeType) ? scopeType : 'all',
+    scopeType: ['all', 'platform', 'selection'].includes(scopeType) ? scopeType : 'selection',
     scopePlatform: ['caltrak', 'indysoft'].includes(scopePlatform) ? scopePlatform : 'caltrak',
     onsitePct: toNum(src.onsitePct, 0),
     productivityPct: toNum(src.productivityPct, 0),
     headcountDelta: toNum(src.headcountDelta, 0),
-    demandPct: toNum(src.demandPct, 0)
+    demandPct: toNum(src.demandPct, 0),
+    selectedLabs,
+    view: ['weekly', 'monthly', 'quarterly', 'yearly'].includes(view) ? view : 'weekly',
+    statusFilter: ['all', 'over', 'risk', 'ok'].includes(statusFilter) ? statusFilter : 'all'
   };
 }
 
