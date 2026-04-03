@@ -173,12 +173,12 @@ const VIEW_META = {
     utilKey: 'wUtil',
     demandHeader: 'Std hrs',
     historicalDemandHeader: 'Hist std hrs',
-    capHeader: 'Weekly cap',
+    capHeader: 'Weekly capacity',
     gapHeader: 'Weekly margin',
     demandHelp: 'Standard weekly demand hours for the lab.',
     historicalDemandHelp: 'Standard demand hours for the same week one year earlier.',
     capHelp: 'Estimated weekly supply capacity from available techs and assumptions.',
-    gapHelp: 'Weekly cap minus weekly demand; negative means shortfall.'
+    gapHelp: 'Weekly capacity minus weekly demand; negative means shortfall.'
   },
   monthly: {
     label: 'Monthly',
@@ -189,12 +189,12 @@ const VIEW_META = {
     utilKey: 'mUtil',
     demandHeader: 'Month demand',
     historicalDemandHeader: 'Hist month demand',
-    capHeader: 'Month cap',
+    capHeader: 'Month capacity',
     gapHeader: 'Month margin',
     demandHelp: 'Estimated monthly demand converted from weekly demand using Weeks/month.',
     historicalDemandHelp: 'Demand for this month using the prior-year weekly standard-hours baseline scaled by Weeks/month.',
     capHelp: 'Estimated monthly capacity using Weeks/month.',
-    gapHelp: 'Monthly cap minus monthly demand; negative means shortfall.'
+    gapHelp: 'Monthly capacity minus monthly demand; negative means shortfall.'
   },
   quarterly: {
     label: 'Quarterly',
@@ -205,12 +205,12 @@ const VIEW_META = {
     utilKey: 'qUtil',
     demandHeader: 'Qtr demand',
     historicalDemandHeader: 'Hist qtr demand',
-    capHeader: 'Qtr cap',
+    capHeader: 'Qtr capacity',
     gapHeader: 'Qtr margin',
     demandHelp: 'Demand for the fiscal quarter (3 months). Fiscal calendar runs Apr-Mar.',
     historicalDemandHelp: 'Demand for the fiscal quarter using same-month prior-year standard-hours values.',
     capHelp: 'Capacity for the fiscal quarter (3 months). Fiscal calendar runs Apr-Mar.',
-    gapHelp: 'Quarter cap minus quarter demand; negative means shortfall.'
+    gapHelp: 'Quarter capacity minus quarter demand; negative means shortfall.'
   },
   yearly: {
     label: 'Yearly',
@@ -221,7 +221,7 @@ const VIEW_META = {
     utilKey: 'yUtil',
     demandHeader: 'FY demand',
     historicalDemandHeader: 'Hist FY demand',
-    capHeader: 'FY cap',
+    capHeader: 'FY capacity',
     gapHeader: 'FY margin',
     demandHelp: 'Demand for the full fiscal year (Apr-Mar).',
     historicalDemandHelp: 'Demand for the full fiscal year using same-month prior-year standard-hours values.',
