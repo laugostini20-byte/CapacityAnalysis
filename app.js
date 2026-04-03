@@ -1727,12 +1727,13 @@ function computeScenarioRows(context) {
     const scenarioLostFTE = Math.max(0, row.lostFTE + onsiteTechDelta);
     const scenarioAvail = Math.max(0, scenarioBaseTech - scenarioLostFTE);
     const scenarioWeeklyStd = Math.max(0, row.wDemand + stdHoursDelta);
+    const weeklyDelta = stdHoursDelta;
     const scenarioDemand = currentView === 'monthly'
       ? (scenarioWeeklyStd * context.weeksPerMo)
       : currentView === 'quarterly'
-        ? (scenarioWeeklyStd * context.weeksPerMo * context.quarterMonthCount)
+        ? Math.max(0, row.qDemand + (weeklyDelta * context.weeksPerMo * context.quarterMonthCount))
         : currentView === 'yearly'
-          ? (scenarioWeeklyStd * context.weeksPerMo * context.yearMonthCount)
+          ? Math.max(0, row.yDemand + (weeklyDelta * context.weeksPerMo * context.yearMonthCount))
           : scenarioWeeklyStd;
 
     const scenarioWCap = scenarioAvail * effectiveHrsPerDay * context.daysPerWeek;
