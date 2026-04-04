@@ -227,25 +227,56 @@ function computeTrend(labName) {
   return 'flat';
 }
 
-// Historical avg std hrs for a lab — average of the prior fiscal year's monthly data
-// Scaled to the current view period. Returns null if no data available.
+// Historical peak WIP for a lab — finds the same period one year ago and returns
+// the highest daily WIP snapshot recorded in that window.
+// Weekly: same Mon–Sun last year. Monthly: same calendar month LY. Etc.
 function historicalAvg(labName, viewStr) {
-  const data = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined' ? HARDCODED_STD_HOURS_BY_MONTH : {};
+  const daily = typeof HARDCODED_STD_HOURS_DAILY !== 'undefined' ? HARDCODED_STD_HOURS_DAILY : {};
+  if (!Object.keys(daily).length) return null;
+
   const now = referenceDate();
-  const m = now.getMonth();
-  const prevFYStart = (m >= 3 ? now.getFullYear() : now.getFullYear() - 1) - 1;
-  // Collect all 12 months of the prior FY (Apr-Mar)
-  const vals = [];
-  for (const mo of FY_MONTH_SUFFIXES) {
-    const yr = mo <= '03' ? prevFYStart + 1 : prevFYStart;
-    const v = data[`${yr}-${mo}`]?.[labName];
-    if (v != null) vals.push(v);
+  // Shift back exactly one year
+  const ly = new Date(now);
+  ly.setFullYear(ly.getFullYear() - 1);
+
+  let lyStart, lyEnd;
+  const pad = n => String(n).padStart(2, '0');
+  const toStr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+  if (viewStr === 'weekly') {
+    const dow = ly.getDay() || 7;
+    const mon = new Date(ly); mon.setDate(ly.getDate() - (dow - 1));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    lyStart = toStr(mon); lyEnd = toStr(sun);
+  } else if (viewStr === 'monthly') {
+    lyStart = `${ly.getFullYear()}-${pad(ly.getMonth()+1)}-01`;
+    lyEnd = toStr(new Date(ly.getFullYear(), ly.getMonth()+1, 0));
+  } else if (viewStr === 'quarterly') {
+    // Same fiscal quarter LY
+    const fyStart = ly.getMonth() >= 3 ? ly.getFullYear() : ly.getFullYear() - 1;
+    const fiscalMo = (ly.getMonth() - 3 + 12) % 12;
+    const qIdx = Math.floor(fiscalMo / 3);
+    const qStartCal = (qIdx * 3 + 3) % 12;
+    const qStartYear = qStartCal <= 2 ? fyStart + 1 : fyStart;
+    const qEndCal = (qStartCal + 2) % 12;
+    const qEndYear = qEndCal < qStartCal ? fyStart + 1 : qStartYear;
+    lyStart = toStr(new Date(qStartYear, qStartCal, 1));
+    lyEnd   = toStr(new Date(qEndYear, qEndCal + 1, 0));
+  } else {
+    // Yearly — full prior fiscal year
+    const fyStart = ly.getMonth() >= 3 ? ly.getFullYear() : ly.getFullYear() - 1;
+    lyStart = `${fyStart}-04-01`;
+    lyEnd   = `${fyStart + 1}-03-31`;
   }
-  if (!vals.length) return null;
-  const monthlyAvg = vals.reduce((a,b) => a+b, 0) / vals.length;
-  // Scale from monthly to the requested view
-  const s = VIEW_SCALE[viewStr] ?? 1;
-  return monthlyAvg * (s / WEEKS_PER_MONTH);   // monthlyAvg → weekly → view scale
+
+  // Find peak daily WIP in that window
+  let peak = null;
+  for (const [dateStr, labs] of Object.entries(daily)) {
+    if (dateStr < lyStart || dateStr > lyEnd) continue;
+    const v = labs[labName];
+    if (v != null && (peak === null || v > peak)) peak = v;
+  }
+  return peak;
 }
 
 // ─── DATA LAYER ──────────────────────────────────────────────────────────────
@@ -496,7 +527,7 @@ function updateTableHeaders() {
   const lbl = VIEW_LABEL[st.view] ?? '';
   const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
   set('th-demand', lbl + ' Demand');
-  set('th-hist',   'LY ' + lbl + ' Avg');
+  set('th-hist',   'LY ' + lbl + ' Peak');
   set('th-capacity', lbl + ' Capacity');
   set('th-margin', lbl + ' Margin');
   set('th-ot', lbl + ' OT Hrs');
