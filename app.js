@@ -223,9 +223,23 @@ function getLatestHeadcount(labName) {
 function getOnsiteTechs(labName, totalTechs, scheduleEvents, today) {
   const key = labKey(labName);
   const todayStr = today.toISOString().slice(0, 10);
-  const matching = scheduleEvents.filter(e => e.labKey === key && e.startDate <= todayStr && e.endDate >= todayStr);
-  if (!matching.length) return totalTechs;
-  return Math.round(matching.reduce((sum, e) => sum + e.techCount, 0));
+
+  // First try: event that covers today
+  const current = scheduleEvents.filter(e => e.labKey === key && e.startDate <= todayStr && e.endDate >= todayStr);
+  if (current.length) return Math.round(current.reduce((sum, e) => sum + e.techCount, 0));
+
+  // Fallback: most recent past event for this lab (schedule may lag by days/weeks)
+  const past = scheduleEvents
+    .filter(e => e.labKey === key && e.endDate < todayStr)
+    .sort((a, b) => b.endDate.localeCompare(a.endDate));
+  if (past.length) {
+    // Use all events that share the same most-recent end date
+    const latestEnd = past[0].endDate;
+    const latest = past.filter(e => e.endDate === latestEnd);
+    return Math.round(latest.reduce((sum, e) => sum + e.techCount, 0));
+  }
+
+  return totalTechs;
 }
 
 function buildLabList() {
