@@ -37,49 +37,44 @@ const SCHEDULE_LAB_KEY_MAP = {
   'm5 st louis':     'st louis cal lab',
 };
 
-// Base lab list — weekly std hours are the source of truth for demand
+// Base lab list — only labs we actively track
+// CalTrak labs with std hours data + IndySoft labs (tracked separately)
+// Martin labs and other unmeasured non-IndySoft labs are excluded
 const BASE_LABS = [
-  {lab:'Martin Cal Lab (Burns)',      techs:61, stdHrs:null},
-  {lab:'Essco Cal Lab',               techs:58, stdHrs:null},
+  // ── CalTrak labs (have std hours / demand data) ──────────────────────────
   {lab:'Houston Cal Lab',             techs:34, stdHrs:943},
-  {lab:'Biomedical',                  techs:33, stdHrs:null},
   {lab:'Philadelphia Cal Lab',        techs:30, stdHrs:618},
   {lab:'Rochester Cal Lab',           techs:27, stdHrs:1084},
-  {lab:'Montreal Cal Lab',            techs:24, stdHrs:null},
-  {lab:'Pipettes Milford Lab',        techs:21, stdHrs:null},
   {lab:'Dayton Cal Lab',              techs:19, stdHrs:882},
   {lab:'Toronto Cal Lab',             techs:19, stdHrs:321},
   {lab:'Charlotte Cal Lab',           techs:17, stdHrs:369},
   {lab:'Denver Cal Lab',              techs:15, stdHrs:552},
   {lab:'Pittsburgh Cal Lab',          techs:14, stdHrs:515},
-  {lab:'Martin Cal Lab (RMS)',        techs:13, stdHrs:null},
   {lab:'Los Angeles Cal Lab',         techs:13, stdHrs:539},
-  {lab:'Chesapeake Cal Lab',          techs:12, stdHrs:null},
-  {lab:'Cleveland Cal Lab',           techs:12, stdHrs:null},
   {lab:'St. Louis Cal Lab',           techs:12, stdHrs:487},
-  {lab:'Pipettes Field Service',      techs:11, stdHrs:null},
   {lab:'Boston Cal Lab',              techs:9,  stdHrs:274},
-  {lab:'Alliance Cal Lab',            techs:7,  stdHrs:null},
   {lab:'Portland Cal Lab',            techs:7,  stdHrs:354},
-  {lab:'Martin Cal Lab (Mund)',       techs:7,  stdHrs:null},
   {lab:'Honda Lincoln, AL (AAP)',     techs:7,  stdHrs:166},
   {lab:'Phoenix Cal Lab',             techs:7,  stdHrs:null},
-  {lab:'San Diego Cal Lab',           techs:6,  stdHrs:null},
-  {lab:'Martin Cal Lab (GLC)',        techs:5,  stdHrs:null},
-  {lab:'Tangent Indianapolis Lab',    techs:5,  stdHrs:null},
   {lab:'Palm Beach Cal Lab',          techs:4,  stdHrs:140},
   {lab:'Honda E Liberty, OH (ELP)',   techs:3,  stdHrs:54},
   {lab:'Honda Greensburg IN (IAP)',   techs:3,  stdHrs:57},
   {lab:'Ottawa Cal Lab',              techs:3,  stdHrs:77},
-  {lab:'Martin Cal Lab (PTS)',        techs:3,  stdHrs:null},
-  {lab:'Tangent Decatur Cal Lab',     techs:3,  stdHrs:null},
-  {lab:'Pipettes San Diego Lab',      techs:3,  stdHrs:null},
   {lab:'Honda Dayton, OH',            techs:2,  stdHrs:82},
-  {lab:'Martin Cal Lab (Los Alam)',   techs:2,  stdHrs:null},
   {lab:'Puerto Rico Cal Lab',         techs:2,  stdHrs:29},
-  {lab:'Martin Cal Lab (Eau)',        techs:2,  stdHrs:null},
   {lab:'Honda Anna, OH (AEP)',        techs:1,  stdHrs:23},
   {lab:'Honda Marysville OH (MAP)',   techs:1,  stdHrs:44},
+  // ── IndySoft labs (shown when IndySoft filter is active) ─────────────────
+  {lab:'Biomedical',                  techs:33, stdHrs:null},
+  {lab:'Montreal Cal Lab',            techs:24, stdHrs:null},
+  {lab:'Pipettes Milford Lab',        techs:21, stdHrs:null},
+  {lab:'Chesapeake Cal Lab',          techs:12, stdHrs:null},
+  {lab:'Cleveland Cal Lab',           techs:12, stdHrs:null},
+  {lab:'Pipettes Field Service',      techs:11, stdHrs:null},
+  {lab:'San Diego Cal Lab',           techs:6,  stdHrs:null},
+  {lab:'Tangent Indianapolis Lab',    techs:5,  stdHrs:null},
+  {lab:'Tangent Decatur Cal Lab',     techs:3,  stdHrs:null},
+  {lab:'Pipettes San Diego Lab',      techs:3,  stdHrs:null},
 ];
 
 // FY month keys in order (Apr–Mar)
@@ -96,6 +91,7 @@ function currentFYStartYear() {
 const st = {
   view: 'weekly',
   tab: 'status-board',
+  weekOffset: 0,               // weeks forward/back from today (for week nav)
   filters: { system: 'all', status: 'all', search: '' },
   sortKey: 'load',
   sortDir: -1,                 // -1 = desc (highest load first)
@@ -231,6 +227,27 @@ function computeTrend(labName) {
   return 'flat';
 }
 
+// Historical avg std hrs for a lab — average of the prior fiscal year's monthly data
+// Scaled to the current view period. Returns null if no data available.
+function historicalAvg(labName, viewStr) {
+  const data = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined' ? HARDCODED_STD_HOURS_BY_MONTH : {};
+  const now = referenceDate();
+  const m = now.getMonth();
+  const prevFYStart = (m >= 3 ? now.getFullYear() : now.getFullYear() - 1) - 1;
+  // Collect all 12 months of the prior FY (Apr-Mar)
+  const vals = [];
+  for (const mo of FY_MONTH_SUFFIXES) {
+    const yr = mo <= '03' ? prevFYStart + 1 : prevFYStart;
+    const v = data[`${yr}-${mo}`]?.[labName];
+    if (v != null) vals.push(v);
+  }
+  if (!vals.length) return null;
+  const monthlyAvg = vals.reduce((a,b) => a+b, 0) / vals.length;
+  // Scale from monthly to the requested view
+  const s = VIEW_SCALE[viewStr] ?? 1;
+  return monthlyAvg * (s / WEEKS_PER_MONTH);   // monthlyAvg → weekly → view scale
+}
+
 // ─── DATA LAYER ──────────────────────────────────────────────────────────────
 function getLatestHeadcount(labName) {
   const hc = typeof HARDCODED_MONTHLY_HEADCOUNT !== 'undefined' ? HARDCODED_MONTHLY_HEADCOUNT : {};
@@ -242,9 +259,16 @@ function getLatestHeadcount(labName) {
   return null;
 }
 
+// Reference date — today offset by weekOffset weeks (used for week nav)
+function referenceDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + st.weekOffset * 7);
+  return d;
+}
+
 // Returns { start, end, workDays } for the current period matching the view
 function getPeriodDates(viewStr) {
-  const now = new Date();
+  const now = referenceDate();
   const y = now.getFullYear(), m = now.getMonth();
   const pad = n => String(n).padStart(2, '0');
   const localStr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -305,7 +329,10 @@ function buildLabList() {
     const key = labKey(base.lab);
     const settings = st.labSettings[key] ?? {};
     const dbEntry = st.dbStdHrs[key];
-    const stdHrs = dbEntry?.stdHrsPerWeek ?? base.stdHrs ?? 0;
+    const rawStdHrs = dbEntry?.stdHrsPerWeek ?? base.stdHrs;
+    // Only show labs that have actual demand data OR are IndySoft (tracked separately)
+    if (rawStdHrs == null && !isIndySoft(base.lab)) continue;
+    const stdHrs = rawStdHrs ?? 0;
     const totalTechs = getLatestHeadcount(base.lab) ?? base.techs;
     const productivityPct = settings.productivityPct ?? DEFAULT_PROD_PCT;
     const daysPerWeek = settings.daysPerWeek ?? 5;
@@ -406,6 +433,46 @@ function setFilter(key, val) {
   renderStatusBoard();
 }
 
+// ─── WEEK NAVIGATION ─────────────────────────────────────────────────────────
+function shiftWeek(delta) {
+  st.weekOffset += delta;
+  updateWeekLabel();
+  renderStatusBoard();
+}
+
+function resetWeek() {
+  st.weekOffset = 0;
+  updateWeekLabel();
+  renderStatusBoard();
+}
+
+function updateWeekLabel() {
+  const ref = referenceDate();
+  const dow = ref.getDay() || 7;
+  const mon = new Date(ref); mon.setDate(ref.getDate() - (dow - 1));
+  const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+  const fmt = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  const lbl = document.getElementById('week-label');
+  if (lbl) lbl.textContent = `${fmt(mon)} – ${fmt(fri)}`;
+  const todayBtn = document.getElementById('today-btn');
+  if (todayBtn) todayBtn.style.display = st.weekOffset !== 0 ? 'inline-block' : 'none';
+}
+
+// ─── SUMMARY CARDS ───────────────────────────────────────────────────────────
+function renderSummaryCards() {
+  const all = st.labList;
+  const counts = { over: 0, risk: 0, ok: 0 };
+  all.forEach(lab => {
+    const s = baseMetrics(lab, st.view).status;
+    if (counts[s] !== undefined) counts[s]++;
+  });
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('card-total', all.length);
+  set('card-over',  counts.over);
+  set('card-risk',  counts.risk);
+  set('card-ok',    counts.ok);
+}
+
 function setSegActive(groupId, val, labelMap) {
   const group = document.getElementById(groupId);
   if (!group) return;
@@ -429,6 +496,7 @@ function updateTableHeaders() {
   const lbl = VIEW_LABEL[st.view] ?? '';
   const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
   set('th-demand', lbl + ' Demand');
+  set('th-hist',   'LY ' + lbl + ' Avg');
   set('th-capacity', lbl + ' Capacity');
   set('th-margin', lbl + ' Margin');
   set('th-ot', lbl + ' OT Hrs');
@@ -471,6 +539,7 @@ function sortedLabs(labs) {
       case 'margin':   va = ma.margin; vb = mb.margin; break;
       case 'load':     va = ma.loadPct; vb = mb.loadPct; break;
       case 'ot':       va = ma.otHrs; vb = mb.otHrs; break;
+      case 'hist':     va = historicalAvg(a.labName, st.view) ?? -1; vb = historicalAvg(b.labName, st.view) ?? -1; break;
       case 'trend': {
         const tmap = { up: 2, flat: 1, down: 0, null: -1 };
         va = tmap[computeTrend(a.labName)] ?? -1;
@@ -485,10 +554,12 @@ function sortedLabs(labs) {
 }
 
 function renderStatusBoard() {
+  updateWeekLabel();
+  renderSummaryCards();
   const labs = sortedLabs(filteredLabs());
   const tbody = document.getElementById('status-tbody');
   if (!labs.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="12">No labs match the current filters.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="13">No labs match the current filters.</td></tr>';
     return;
   }
 
@@ -531,6 +602,7 @@ function renderStatusBoard() {
           title="Edit productivity %">%
       </td>
       <td class="td-num">${fmtInt(m.demand)}</td>
+      <td class="td-num" style="color:#a1a1aa">${fmtInt(historicalAvg(lab.labName, st.view))}</td>
       <td class="td-num">${fmtInt(m.capacity)}</td>
       <td class="td-num ${marginClass}">${fmtSgn(m.margin, 0)}</td>
       <td class="td-num ${loadClass}">${fmt(m.loadPct, 1)}%</td>
@@ -1104,6 +1176,7 @@ async function submitUpload(e, type) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 async function init() {
   updateTableHeaders();
+  updateWeekLabel();
   await loadData();
   renderStatusBoard();
 }

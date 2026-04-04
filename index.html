@@ -81,6 +81,29 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:13px;backg
 .prod-input{width:44px;border:1px solid #e4e4e7;border-radius:4px;padding:2px 4px;font-size:11px;text-align:right;background:#fff;color:#18181b;outline:none;font-variant-numeric:tabular-nums}
 .prod-input:focus{border-color:#6366f1}
 
+/* WEEK NAV */
+#week-nav-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+#week-label{font-size:13px;font-weight:600;color:#3f3f46;min-width:220px;text-align:center}
+.week-nav-btn{background:#fff;border:1px solid #e4e4e7;border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer;color:#52525b;line-height:1.4}
+.week-nav-btn:hover{background:#f4f4f5;border-color:#a1a1aa}
+.week-nav-today{font-size:11px;font-weight:600;color:#6366f1;border-color:#e0e7ff;background:#f0f4ff}
+.week-nav-today:hover{background:#e0e7ff}
+
+/* SUMMARY CARDS */
+#summary-cards{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.sum-card{flex:1;min-width:130px;background:#fff;border:1px solid #e4e4e7;border-radius:8px;padding:10px 14px;border-top:3px solid #e4e4e7}
+.sum-total{border-top-color:#6366f1}
+.sum-over{border-top-color:#ef4444}
+.sum-risk{border-top-color:#f59e0b}
+.sum-ok{border-top-color:#22c55e}
+.sum-label{font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.4px}
+.sum-value{font-size:26px;font-weight:700;color:#18181b;line-height:1.1;margin-top:2px}
+.sum-total .sum-value{color:#6366f1}
+.sum-over .sum-value{color:#ef4444}
+.sum-risk .sum-value{color:#f59e0b}
+.sum-ok .sum-value{color:#16a34a}
+.sum-sub{font-size:10px;color:#a1a1aa;margin-top:2px}
+
 /* MODALS */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:500}
 .modal-backdrop[hidden]{display:none!important}
@@ -199,6 +222,37 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:13px;backg
 <!-- ─── STATUS BOARD ─────────────────────────────────────────────────────── -->
 <div id="view-status-board" class="view-panel active">
 
+  <!-- Week navigation bar -->
+  <div id="week-nav-bar">
+    <button class="week-nav-btn" onclick="shiftWeek(-1)">&#8592;</button>
+    <span id="week-label">—</span>
+    <button class="week-nav-btn" onclick="shiftWeek(1)">&#8594;</button>
+    <button class="week-nav-btn week-nav-today" onclick="resetWeek()" id="today-btn" style="display:none">Today</button>
+  </div>
+
+  <!-- Summary cards -->
+  <div id="summary-cards">
+    <div class="sum-card sum-total">
+      <div class="sum-label">Labs Tracked</div>
+      <div class="sum-value" id="card-total">—</div>
+    </div>
+    <div class="sum-card sum-over">
+      <div class="sum-label">Over Capacity</div>
+      <div class="sum-value" id="card-over">—</div>
+      <div class="sum-sub">demand exceeds supply</div>
+    </div>
+    <div class="sum-card sum-risk">
+      <div class="sum-label">At Risk</div>
+      <div class="sum-value" id="card-risk">—</div>
+      <div class="sum-sub">80–100% load</div>
+    </div>
+    <div class="sum-card sum-ok">
+      <div class="sum-label">Healthy</div>
+      <div class="sum-value" id="card-ok">—</div>
+      <div class="sum-sub">within capacity</div>
+    </div>
+  </div>
+
   <div id="filter-bar">
     <div class="filter-group">
       <span class="filter-label">System</span>
@@ -251,6 +305,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:13px;backg
           <th onclick="sortBy('avail')">Avail</th>
           <th onclick="sortBy('prod')">Prod %</th>
           <th onclick="sortBy('demand')" id="th-demand">Demand</th>
+          <th onclick="sortBy('hist')" id="th-hist" title="Avg monthly std hrs same period last year">Hist Avg</th>
           <th onclick="sortBy('capacity')" id="th-capacity">Capacity</th>
           <th onclick="sortBy('margin')" id="th-margin">Margin</th>
           <th onclick="sortBy('load')">Load %</th>
@@ -259,7 +314,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:13px;backg
         </tr>
       </thead>
       <tbody id="status-tbody">
-        <tr class="empty-row"><td colspan="12">Loading…</td></tr>
+        <tr class="empty-row"><td colspan="13">Loading…</td></tr>
       </tbody>
     </table>
   </div>
