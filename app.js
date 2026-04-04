@@ -676,15 +676,8 @@ async function openModal(labName) {
   `;
   document.getElementById('lab-modal').removeAttribute('hidden');
 
-  // Fetch DB history + build chart
-  let dbHistory = [];
-  try {
-    const res = await apiFetch(`/api/labs/history/${encodeURIComponent(lab.labKey)}`);
-    dbHistory = res.history ?? [];
-  } catch (e) { /* no DB history */ }
-
-  buildLabChart(lab, dbHistory);
-  buildModalStats(labName);
+  buildLabChart(lab);
+  buildModalStats(lab);
 }
 
 function closeModal() {
@@ -697,86 +690,63 @@ function onModalBackdropClick(e) {
   if (e.target === document.getElementById('lab-modal')) closeModal();
 }
 
-function buildLabChart(lab, dbHistory) {
-  const histData = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined' ? HARDCODED_STD_HOURS_BY_MONTH : {};
-  const fyStart = currentFYStartYear();
+// Compute monthly load % for a lab using historical headcount where available,
+// falling back to the lab's current headcount for months not in the dataset.
+function monthlyLoadPct(lab, fyStartYear) {
+  const wipData   = typeof HARDCODED_STD_HOURS_BY_MONTH    !== 'undefined' ? HARDCODED_STD_HOURS_BY_MONTH    : {};
+  const hcData    = typeof HARDCODED_MONTHLY_HEADCOUNT     !== 'undefined' ? HARDCODED_MONTHLY_HEADCOUNT     : {};
+
+  return FY_MONTH_SUFFIXES.map(mo => {
+    const yr  = mo <= '03' ? fyStartYear + 1 : fyStartYear;
+    const key = `${yr}-${mo}`;
+    const demand = wipData[key]?.[lab.labName];
+    if (demand == null) return null;
+    const techs = hcData[key]?.[lab.labName] ?? lab.totalTechs;
+    const monthlyCap = techs * (SHIFT_HRS * lab.productivityPct / 100) * lab.daysPerWeek * WEEKS_PER_MONTH;
+    if (monthlyCap <= 0) return null;
+    return Math.round((demand / monthlyCap) * 1000) / 10;  // one decimal
+  });
+}
+
+function buildLabChart(lab) {
+  const fyStart     = currentFYStartYear();
   const prevFYStart = fyStart - 1;
 
-  // Build this FY and last FY series from monthly data
-  const thisFY = FY_MONTH_SUFFIXES.map(mo => {
-    const yr = mo <= '03' ? fyStart + 1 : fyStart;
-    const key = `${yr}-${mo}`;
-    return histData[key]?.[lab.labName] ?? null;
-  });
-
-  const lastFY = FY_MONTH_SUFFIXES.map(mo => {
-    const yr = mo <= '03' ? prevFYStart + 1 : prevFYStart;
-    const key = `${yr}-${mo}`;
-    return histData[key]?.[lab.labName] ?? null;
-  });
-
-  // Also fold in DB history records (group by fiscal month)
-  const dbByMonth = {};
-  dbHistory.forEach(({ date, stdHrs }) => {
-    const d = new Date(date + 'T00:00:00');
-    const yr = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    dbByMonth[`${yr}-${mo}`] = stdHrs;
-  });
-  // Override monthly data with DB values for this FY
-  FY_MONTH_SUFFIXES.forEach((mo, i) => {
-    const yr = mo <= '03' ? fyStart + 1 : fyStart;
-    const key = `${yr}-${mo}`;
-    if (dbByMonth[key] != null) thisFY[i] = dbByMonth[key];
-  });
-  FY_MONTH_SUFFIXES.forEach((mo, i) => {
-    const yr = mo <= '03' ? prevFYStart + 1 : prevFYStart;
-    const key = `${yr}-${mo}`;
-    if (dbByMonth[key] != null) lastFY[i] = dbByMonth[key];
-  });
-
-  // Monthly capacity reference line
-  const weeklyAvail = Math.max(0, lab.totalTechs - onsiteFTE(lab.labName, 'weekly'));
-  const monthlyCap = weeklyAvail * (SHIFT_HRS * lab.productivityPct / 100) * lab.daysPerWeek * WEEKS_PER_MONTH;
-  const capLine = FY_MONTH_LABELS.map(() => monthlyCap);
-
-  const hasLastFY = lastFY.some(v => v != null);
+  const thisFYLoad = monthlyLoadPct(lab, fyStart);
+  const lastFYLoad = monthlyLoadPct(lab, prevFYStart);
+  const hasLastFY  = lastFYLoad.some(v => v != null);
+  const hasThisFY  = thisFYLoad.some(v => v != null);
 
   const ctx = document.getElementById('lab-chart');
   if (st.chart) { st.chart.destroy(); st.chart = null; }
 
-  const datasets = [
-    {
+  const datasets = [];
+
+  if (hasLastFY) {
+    datasets.push({
+      label: `FY ${prevFYStart}–${String(prevFYStart + 1).slice(2)}`,
+      data: lastFYLoad,
+      borderColor: '#a78bfa',
+      borderDash: [4, 3],
+      borderWidth: 2,
+      tension: 0.3,
+      spanGaps: true,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      fill: false,
+    });
+  }
+
+  if (hasThisFY) {
+    datasets.push({
       label: `FY ${fyStart}–${String(fyStart + 1).slice(2)}`,
-      data: thisFY,
+      data: thisFYLoad,
       borderColor: '#2563eb',
-      backgroundColor: 'rgba(37,99,235,.08)',
+      borderWidth: 2.5,
       tension: 0.3,
       spanGaps: true,
       pointRadius: 4,
       pointHoverRadius: 6,
-      fill: false,
-    },
-    {
-      label: 'Capacity',
-      data: capLine,
-      borderColor: '#d1d5db',
-      borderDash: [5, 4],
-      borderWidth: 1.5,
-      pointRadius: 0,
-      fill: false,
-    },
-  ];
-
-  if (hasLastFY) {
-    datasets.splice(1, 0, {
-      label: `FY ${prevFYStart}–${String(prevFYStart + 1).slice(2)}`,
-      data: lastFY,
-      borderColor: '#a78bfa',
-      borderDash: [3, 3],
-      tension: 0.3,
-      spanGaps: true,
-      pointRadius: 3,
       fill: false,
     });
   }
@@ -792,60 +762,77 @@ function buildLabChart(lab, dbHistory) {
         legend: { position: 'top', labels: { font: { size: 11 }, padding: 12, boxWidth: 24 } },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? fmtInt(ctx.parsed.y) + ' hrs' : '—'}`,
+            label: c => `${c.dataset.label}: ${c.parsed.y != null ? c.parsed.y.toFixed(1) + '%' : '—'}`,
+          },
+        },
+        annotation: {
+          annotations: {
+            overLine: {
+              type: 'line', yMin: 100, yMax: 100,
+              borderColor: 'rgba(239,68,68,0.5)', borderWidth: 1.5, borderDash: [5,4],
+              label: { content: 'Over capacity', display: true, position: 'end',
+                       font: { size: 9 }, color: '#ef4444', backgroundColor: 'transparent' },
+            },
+            riskLine: {
+              type: 'line', yMin: 80, yMax: 80,
+              borderColor: 'rgba(217,119,6,0.4)', borderWidth: 1.5, borderDash: [5,4],
+              label: { content: 'At risk', display: true, position: 'end',
+                       font: { size: 9 }, color: '#d97706', backgroundColor: 'transparent' },
+            },
           },
         },
       },
       scales: {
-        x: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 } } },
+        x: { grid: { color: '#f4f4f5' }, ticks: { font: { size: 11 } } },
         y: {
-          grid: { color: '#f0f0f0' },
-          ticks: { font: { size: 11 }, callback: v => fmtInt(v) },
-          title: { display: true, text: 'Std Hrs / Month', font: { size: 10 }, color: '#a1a1aa' },
+          grid: { color: '#f4f4f5' },
+          min: 0,
+          ticks: {
+            font: { size: 11 },
+            callback: v => v + '%',
+          },
+          title: { display: true, text: 'Load % (demand ÷ capacity)', font: { size: 10 }, color: '#a1a1aa' },
         },
       },
     },
   });
 }
 
-function buildModalStats(labName) {
-  const histData = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined' ? HARDCODED_STD_HOURS_BY_MONTH : {};
-  const fyStart = currentFYStartYear();
+function buildModalStats(lab) {
+  const fyStart     = currentFYStartYear();
   const prevFYStart = fyStart - 1;
 
-  const thisFYVals = FY_MONTH_SUFFIXES.map(mo => {
-    const yr = mo <= '03' ? fyStart + 1 : fyStart;
-    return histData[`${yr}-${mo}`]?.[labName];
-  }).filter(v => v != null);
+  const thisFYLoad = monthlyLoadPct(lab, fyStart).filter(v => v != null);
+  const lastFYLoad = monthlyLoadPct(lab, prevFYStart).filter(v => v != null);
 
-  const lastFYVals = FY_MONTH_SUFFIXES.map(mo => {
-    const yr = mo <= '03' ? prevFYStart + 1 : prevFYStart;
-    return histData[`${yr}-${mo}`]?.[labName];
-  }).filter(v => v != null);
-
-  const avgThis = thisFYVals.length ? thisFYVals.reduce((a, b) => a + b, 0) / thisFYVals.length : null;
-  const avgLast = lastFYVals.length ? lastFYVals.reduce((a, b) => a + b, 0) / lastFYVals.length : null;
+  const avgThis = thisFYLoad.length ? thisFYLoad.reduce((a,b) => a+b, 0) / thisFYLoad.length : null;
+  const avgLast = lastFYLoad.length ? lastFYLoad.reduce((a,b) => a+b, 0) / lastFYLoad.length : null;
+  const peakThis = thisFYLoad.length ? Math.max(...thisFYLoad) : null;
+  const moOver   = thisFYLoad.filter(v => v > 100).length;
   const yoy = avgThis != null && avgLast != null && avgLast > 0
-    ? ((avgThis - avgLast) / avgLast) * 100 : null;
+    ? avgThis - avgLast : null;
+
+  const loadColor = v => v == null ? '#18181b' : v > 100 ? '#ef4444' : v >= 80 ? '#d97706' : '#16a34a';
+  const sign = v => v > 0 ? '+' : '';
 
   const statsEl = document.getElementById('modal-stats');
   statsEl.innerHTML = `
     <div class="stat-card">
-      <div class="stat-label">This FY avg</div>
-      <div class="stat-value">${avgThis != null ? fmtInt(avgThis) : '—'}</div>
-      <div class="stat-sub">std hrs/month · FY${fyStart}–${String(fyStart+1).slice(2)}</div>
+      <div class="stat-label">Avg load · FY${fyStart}–${String(fyStart+1).slice(2)}</div>
+      <div class="stat-value" style="color:${loadColor(avgThis)}">${avgThis != null ? fmt(avgThis,1)+'%' : '—'}</div>
+      <div class="stat-sub">${moOver > 0 ? moOver + ' month' + (moOver>1?'s':'')+' over capacity' : 'No months over capacity'}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Last FY avg</div>
-      <div class="stat-value">${avgLast != null ? fmtInt(avgLast) : '—'}</div>
-      <div class="stat-sub">std hrs/month · FY${prevFYStart}–${String(prevFYStart+1).slice(2)}</div>
+      <div class="stat-label">Peak load · this FY</div>
+      <div class="stat-value" style="color:${loadColor(peakThis)}">${peakThis != null ? fmt(peakThis,1)+'%' : '—'}</div>
+      <div class="stat-sub">highest single month</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">YoY change</div>
-      <div class="stat-value" style="color:${yoy == null ? '#18181b' : yoy > 0 ? '#ef4444' : '#16a34a'}">
-        ${yoy != null ? (yoy > 0 ? '+' : '') + fmt(yoy, 1) + '%' : '—'}
+      <div class="stat-label">Avg load · FY${prevFYStart}–${String(prevFYStart+1).slice(2)}</div>
+      <div class="stat-value" style="color:${loadColor(avgLast)}">${avgLast != null ? fmt(avgLast,1)+'%' : '—'}</div>
+      <div class="stat-sub">
+        ${yoy != null ? `<span style="color:${yoy > 5 ? '#ef4444' : yoy < -5 ? '#16a34a' : '#d97706'}">${sign(yoy)}${fmt(yoy,1)}pp vs last FY</span>` : 'Insufficient prior-year data'}
       </div>
-      <div class="stat-sub">${yoy == null ? 'Insufficient prior-year data' : 'vs prior fiscal year'}</div>
     </div>
   `;
 }
