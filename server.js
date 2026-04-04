@@ -121,6 +121,25 @@ function normalizeLabKey(v) {
     .trim();
 }
 
+// Maps schedule export lab codes (e.g. "05 houston") to canonical BASE_LABS lab keys
+const SCHEDULE_LAB_KEY_MAP = {
+  '01 rochester':    'rochester cal lab',
+  '02 portland':     'portland cal lab',
+  '05 houston':      'houston cal lab',
+  '06 philadelphia': 'philadelphia cal lab',
+  '09 toronto':      'toronto cal lab',
+  '11 boston':       'boston cal lab',
+  '15 dayton':       'dayton cal lab',
+  '17 charlotte':    'charlotte cal lab',
+  '19 los angeles':  'los angeles cal lab',
+  '23 denver':       'denver cal lab',
+  '24 phoenix':      'phoenix cal lab',
+  '31 san diego':    'san diego cal lab',
+  '33 ottawa':       'ottawa cal lab',
+  '61 palm beach':   'palm beach cal lab',
+  'm5 st louis':     'st louis cal lab',
+};
+
 function parseRowsFromBuffer(file) {
   const ext = path.extname(file.originalname || '').toLowerCase();
   let workbook;
@@ -163,7 +182,8 @@ function parseScheduleEvents(rows) {
 
     const startDate = toISODateLocal(start);
     const endDate = toISODateLocal(end);
-    const labKey = normalizeLabKey(labRaw);
+    const rawKey = normalizeLabKey(labRaw);
+    const labKey = SCHEDULE_LAB_KEY_MAP[rawKey] ?? rawKey;
     if (!labKey) {
       issues.push(`Row ${idx + 2} skipped due to unusable Lab value`);
       return;

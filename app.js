@@ -17,6 +17,26 @@ const INDYSOFT_LABS = new Set([
   'Pipettes Milford Lab', 'Pipettes Field Service', 'Pipettes San Diego Lab'
 ]);
 
+// Maps schedule export lab codes → canonical BASE_LABS lab keys
+// Handles both legacy DB entries ("05 houston") and newly uploaded ones
+const SCHEDULE_LAB_KEY_MAP = {
+  '01 rochester':    'rochester cal lab',
+  '02 portland':     'portland cal lab',
+  '05 houston':      'houston cal lab',
+  '06 philadelphia': 'philadelphia cal lab',
+  '09 toronto':      'toronto cal lab',
+  '11 boston':       'boston cal lab',
+  '15 dayton':       'dayton cal lab',
+  '17 charlotte':    'charlotte cal lab',
+  '19 los angeles':  'los angeles cal lab',
+  '23 denver':       'denver cal lab',
+  '24 phoenix':      'phoenix cal lab',
+  '31 san diego':    'san diego cal lab',
+  '33 ottawa':       'ottawa cal lab',
+  '61 palm beach':   'palm beach cal lab',
+  'm5 st louis':     'st louis cal lab',
+};
+
 // Base lab list — weekly std hours are the source of truth for demand
 const BASE_LABS = [
   {lab:'Martin Cal Lab (Burns)',      techs:61, stdHrs:null},
@@ -153,12 +173,13 @@ function baseMetrics(lab, viewStr) {
   const s = scale(viewStr);
   const hrsPerDay = SHIFT_HRS * (lab.productivityPct / 100);
   const demand = (lab.stdHrsPerWeek ?? 0) * s;
-  const capacity = lab.onsiteTechs * hrsPerDay * lab.daysPerWeek * s;
+  const avail = Math.max(0, lab.totalTechs - onsiteFTE(lab.labName, viewStr));
+  const capacity = avail * hrsPerDay * lab.daysPerWeek * s;
   const margin = capacity - demand;
   const loadPct = capacity > 0 ? (demand / capacity) * 100 : (demand > 0 ? Infinity : 0);
   const otHrs = Math.max(0, demand - capacity);
   const status = getStatus(loadPct);
-  return { demand, capacity, margin, loadPct, otHrs, status };
+  return { demand, capacity, margin, loadPct, otHrs, avail, status };
 }
 
 // Scenario metrics (OT-boosted capacity for load/margin/status; raw capacity for OT Hrs)
@@ -172,7 +193,8 @@ function scenMetrics(lab, inputs, global, viewStr) {
 
   const scenProdPct = Math.min(100, Math.max(1, lab.productivityPct + prodAdj));
   const hrsPerDay = SHIFT_HRS * (scenProdPct / 100);
-  const scenAvail = lab.onsiteTechs + hireTechs;
+  const baseAvail = Math.max(0, lab.totalTechs - onsiteFTE(lab.labName, viewStr));
+  const scenAvail = baseAvail + hireTechs;
   const scenDays = Math.min(7, Math.max(1, lab.daysPerWeek + daysChange));
   const scenTechs = lab.totalTechs + hireTechs;
 
@@ -220,39 +242,71 @@ function getLatestHeadcount(labName) {
   return null;
 }
 
-function getOnsiteTechs(labName, totalTechs, scheduleEvents, today) {
-  const key = labKey(labName);
-  const todayStr = today.toISOString().slice(0, 10);
+// Returns { start, end, workDays } for the current period matching the view
+function getPeriodDates(viewStr) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const pad = n => String(n).padStart(2, '0');
+  const localStr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 
-  // First try: event that covers today
-  const current = scheduleEvents.filter(e => e.labKey === key && e.startDate <= todayStr && e.endDate >= todayStr);
-  if (current.length) return Math.round(current.reduce((sum, e) => sum + e.techCount, 0));
-
-  // Fallback: most recent past event for this lab (schedule may lag by days/weeks)
-  const past = scheduleEvents
-    .filter(e => e.labKey === key && e.endDate < todayStr)
-    .sort((a, b) => b.endDate.localeCompare(a.endDate));
-  if (past.length) {
-    // Use all events that share the same most-recent end date
-    const latestEnd = past[0].endDate;
-    const latest = past.filter(e => e.endDate === latestEnd);
-    return Math.round(latest.reduce((sum, e) => sum + e.techCount, 0));
+  if (viewStr === 'weekly') {
+    const dow = now.getDay() || 7; // Mon=1, Sun=7
+    const mon = new Date(now); mon.setDate(now.getDate() - (dow - 1));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return { start: localStr(mon), end: localStr(sun), workDays: 5 };
   }
+  if (viewStr === 'monthly') {
+    return {
+      start: `${y}-${pad(m+1)}-01`,
+      end: localStr(new Date(y, m+1, 0)),
+      workDays: Math.round(5 * WEEKS_PER_MONTH),
+    };
+  }
+  if (viewStr === 'quarterly') {
+    const fyStart = m >= 3 ? y : y - 1;
+    const fiscalMo = (m - 3 + 12) % 12;         // 0=Apr
+    const qIdx = Math.floor(fiscalMo / 3);        // 0,1,2,3
+    const qStartCal = (qIdx * 3 + 3) % 12;       // calendar month (0=Jan)
+    const qStartYear = qStartCal <= 2 ? fyStart + 1 : fyStart;
+    const qEndCal = (qStartCal + 2) % 12;
+    const qEndYear = qEndCal < qStartCal ? fyStart + 1 : qStartYear;
+    return {
+      start: localStr(new Date(qStartYear, qStartCal, 1)),
+      end: localStr(new Date(qEndYear, qEndCal + 1, 0)),
+      workDays: 5 * 13,
+    };
+  }
+  // yearly — current fiscal year Apr–Mar
+  const fyStart = m >= 3 ? y : y - 1;
+  return { start: `${fyStart}-04-01`, end: `${fyStart+1}-03-31`, workDays: 5 * 52 };
+}
 
-  return totalTechs;
+// FTE of techs away from lab doing onsite customer work during the view period
+// "Number of Tech" in schedule = techs leaving the lab; reduces available capacity
+function onsiteFTE(labName, viewStr) {
+  if (!st.scheduleEvents.length) return 0;
+  const { start: pStart, end: pEnd, workDays } = getPeriodDates(viewStr);
+  const key = labKey(labName);
+  let techDaysAway = 0;
+  for (const e of st.scheduleEvents) {
+    if (e.labKey !== key || e.techCount <= 0) continue;
+    const overlapStart = e.startDate > pStart ? e.startDate : pStart;
+    const overlapEnd   = e.endDate   < pEnd   ? e.endDate   : pEnd;
+    if (overlapStart > overlapEnd) continue;
+    const days = (new Date(overlapEnd) - new Date(overlapStart)) / 86400000 + 1;
+    techDaysAway += days * e.techCount;
+  }
+  return workDays > 0 ? techDaysAway / workDays : 0;
 }
 
 function buildLabList() {
-  const today = new Date();
   const labs = [];
   for (const base of BASE_LABS) {
     const key = labKey(base.lab);
     const settings = st.labSettings[key] ?? {};
     const dbEntry = st.dbStdHrs[key];
     const stdHrs = dbEntry?.stdHrsPerWeek ?? base.stdHrs ?? 0;
-
     const totalTechs = getLatestHeadcount(base.lab) ?? base.techs;
-    const onsiteTechs = getOnsiteTechs(base.lab, totalTechs, st.scheduleEvents, today);
     const productivityPct = settings.productivityPct ?? DEFAULT_PROD_PCT;
     const daysPerWeek = settings.daysPerWeek ?? 5;
 
@@ -261,7 +315,6 @@ function buildLabList() {
       labKey: key,
       systemType: systemType(base.lab, settings),
       totalTechs,
-      onsiteTechs,
       productivityPct,
       daysPerWeek,
       stdHrsPerWeek: stdHrs,
@@ -301,12 +354,15 @@ async function loadData() {
     }
 
     if (schedulesRes.status === 'fulfilled') {
-      st.scheduleEvents = (schedulesRes.value.events ?? []).map(e => ({
-        labKey: labKey(e.lab),
-        startDate: e.startDate,
-        endDate: e.endDate,
-        techCount: e.techCount,
-      }));
+      st.scheduleEvents = (schedulesRes.value.events ?? []).map(e => {
+        const raw = labKey(e.lab);
+        return {
+          labKey: SCHEDULE_LAB_KEY_MAP[raw] ?? raw,  // remap legacy "05 houston" → "houston cal lab"
+          startDate: e.startDate,
+          endDate: e.endDate,
+          techCount: e.techCount,
+        };
+      });
     }
 
     if (settingsRes.status === 'fulfilled') {
@@ -408,7 +464,7 @@ function sortedLabs(labs) {
       case 'system':   va = a.systemType; vb = b.systemType; break;
       case 'status':   va = ma.loadPct; vb = mb.loadPct; break;
       case 'techs':    va = a.totalTechs; vb = b.totalTechs; break;
-      case 'avail':    va = a.onsiteTechs; vb = b.onsiteTechs; break;
+      case 'avail':    va = baseMetrics(a, st.view).avail; vb = baseMetrics(b, st.view).avail; break;
       case 'prod':     va = a.productivityPct; vb = b.productivityPct; break;
       case 'demand':   va = ma.demand; vb = mb.demand; break;
       case 'capacity': va = ma.capacity; vb = mb.capacity; break;
@@ -467,7 +523,7 @@ function renderStatusBoard() {
       <td><span class="badge ${sysType === 'indysoft' ? 'badge-indysoft' : 'badge-caltrak'}">${sysType === 'indysoft' ? 'IndySoft' : 'CalTrak'}</span></td>
       <td><span class="badge ${statusBadgeClass(lc)}">${statusLabel(lc)}</span></td>
       <td class="td-num">${lab.totalTechs}</td>
-      <td class="td-num">${lab.onsiteTechs}</td>
+      <td class="td-num">${fmt(m.avail, 1)}</td>
       <td class="td-num" onclick="event.stopPropagation()">
         <input class="prod-input" type="number" min="1" max="100"
           value="${lab.productivityPct}"
@@ -513,7 +569,7 @@ async function openModal(labName) {
     <span>Load: <strong>${fmt(m.loadPct, 1)}%</strong></span>
     <span>OT: <strong>${m.otHrs > 0 ? fmtInt(m.otHrs) + ' hrs/wk' : '—'}</strong></span>
     <span style="color:#d1d5db">|</span>
-    <span>${lab.onsiteTechs} onsite · ${lab.daysPerWeek} days/wk · ${lab.productivityPct}% prod</span>
+    <span>${fmt(baseMetrics(lab,'weekly').avail, 1)} avail · ${lab.daysPerWeek} days/wk · ${lab.productivityPct}% prod</span>
   `;
   document.getElementById('lab-modal').removeAttribute('hidden');
 
@@ -577,7 +633,8 @@ function buildLabChart(lab, dbHistory) {
   });
 
   // Monthly capacity reference line
-  const monthlyCap = lab.onsiteTechs * (SHIFT_HRS * lab.productivityPct / 100) * lab.daysPerWeek * WEEKS_PER_MONTH;
+  const weeklyAvail = Math.max(0, lab.totalTechs - onsiteFTE(lab.labName, 'weekly'));
+  const monthlyCap = weeklyAvail * (SHIFT_HRS * lab.productivityPct / 100) * lab.daysPerWeek * WEEKS_PER_MONTH;
   const capLine = FY_MONTH_LABELS.map(() => monthlyCap);
 
   const hasLastFY = lastFY.some(v => v != null);
@@ -838,7 +895,7 @@ function renderScenRows() {
     return `<div class="scen-lab-block">
       <div class="scen-row row-baseline s-${sc}">
         <div><div class="scen-row-label" style="font-weight:600">${lname}</div><div class="scen-row-sublabel">Baseline · current</div></div>
-        <span>${lab.totalTechs}</span><span>${lab.onsiteTechs}</span>
+        <span>${lab.totalTechs}</span><span>${fmt(baseMetrics(lab, st.scen.view).avail, 1)}</span>
         <span>${fmtInt(b.demand)}</span><span>${fmtInt(b.capacity)}</span>
         <span class="${b.margin >= 0 ? 'margin-pos' : 'margin-neg'}">${fmtSgn(b.margin,0)}</span>
         <span class="${'load-' + sc}">${fmt(b.loadPct,1)}%</span>
