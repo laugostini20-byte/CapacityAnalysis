@@ -235,8 +235,7 @@ function buildLabList() {
     const key = labKey(base.lab);
     const settings = st.labSettings[key] ?? {};
     const dbEntry = st.dbStdHrs[key];
-    const stdHrs = dbEntry?.stdHrsPerWeek ?? base.stdHrs;
-    if (stdHrs == null) continue;  // skip labs with no demand data
+    const stdHrs = dbEntry?.stdHrsPerWeek ?? base.stdHrs ?? 0;
 
     const totalTechs = getLatestHeadcount(base.lab) ?? base.techs;
     const onsiteTechs = getOnsiteTechs(base.lab, totalTechs, st.scheduleEvents, today);
