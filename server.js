@@ -643,6 +643,112 @@ app.delete('/api/scenarios/:id', async (req, res) => {
   }
 });
 
+// ─── NEW CAPACITYIQ ROUTES ──────────────────────────────────────────────────
+
+// GET /api/std-hours/current — latest std hours per lab (one row per lab)
+app.get('/api/std-hours/current', async (_req, res) => {
+  if (!dbRequired(res)) return;
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT ON (lab_key)
+        lab_raw, lab_key, std_hours, effective_from::text AS effective_date
+      FROM std_hours_overrides
+      ORDER BY lab_key, effective_from DESC, updated_at DESC
+    `);
+    const dataDate = result.rows.reduce((max, r) =>
+      (!max || r.effective_date > max ? r.effective_date : max), null);
+    res.json({
+      labs: result.rows.map(r => ({
+        labKey: r.lab_key,
+        labRaw: r.lab_raw,
+        stdHrsPerWeek: Number(r.std_hours),
+        effectiveDate: r.effective_date
+      })),
+      dataDate
+    });
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+// GET /api/lab-settings — per-lab settings keyed by lab_key
+app.get('/api/lab-settings', async (_req, res) => {
+  if (!dbRequired(res)) return;
+  try {
+    const result = await pool.query(
+      `SELECT lab_key, lab_raw, system_type, group_name, productivity_pct, days_per_week
+       FROM lab_settings ORDER BY lab_raw`
+    );
+    const settings = {};
+    result.rows.forEach(r => {
+      settings[r.lab_key] = {
+        systemType: r.system_type,
+        groupName: r.group_name,
+        productivityPct: Number(r.productivity_pct),
+        daysPerWeek: Number(r.days_per_week)
+      };
+    });
+    res.json({settings});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+// PUT /api/lab-settings/:key — upsert settings for one lab
+app.put('/api/lab-settings/:key', async (req, res) => {
+  if (!dbRequired(res)) return;
+  const key = decodeURIComponent(req.params.key);
+  const labRaw = String(req.body?.labRaw || '').trim();
+  const sysRaw = String(req.body?.systemType || 'caltrak').toLowerCase();
+  const systemType = ['caltrak', 'indysoft'].includes(sysRaw) ? sysRaw : 'caltrak';
+  const groupName = req.body?.groupName ? String(req.body.groupName).trim() : null;
+  const rawProd = Number(req.body?.productivityPct);
+  const rawDays = Number(req.body?.daysPerWeek);
+  if (!key || !labRaw) {
+    res.status(400).json({error: 'labKey and labRaw are required.'});
+    return;
+  }
+  const productivityPct = Math.min(100, Math.max(1, Number.isFinite(rawProd) ? rawProd : 70));
+  const daysPerWeek = Math.min(7, Math.max(1, Number.isFinite(rawDays) ? rawDays : 5));
+  try {
+    await pool.query(`
+      INSERT INTO lab_settings (lab_key, lab_raw, system_type, group_name, productivity_pct, days_per_week)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (lab_key) DO UPDATE
+        SET lab_raw = EXCLUDED.lab_raw,
+            system_type = EXCLUDED.system_type,
+            group_name = EXCLUDED.group_name,
+            productivity_pct = EXCLUDED.productivity_pct,
+            days_per_week = EXCLUDED.days_per_week,
+            updated_at = NOW()
+    `, [key, labRaw, systemType, groupName, productivityPct, daysPerWeek]);
+    res.json({ok: true});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+// GET /api/labs/history/:key — all std-hours records for one lab (oldest first)
+app.get('/api/labs/history/:key', async (req, res) => {
+  if (!dbRequired(res)) return;
+  const key = decodeURIComponent(req.params.key);
+  try {
+    const result = await pool.query(`
+      SELECT effective_from::text AS date, std_hours
+      FROM std_hours_overrides
+      WHERE lab_key = $1
+      ORDER BY effective_from ASC
+    `, [key]);
+    res.json({
+      history: result.rows.map(r => ({date: r.date, stdHrs: Number(r.std_hours)}))
+    });
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+// ─── END NEW ROUTES ─────────────────────────────────────────────────────────
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });

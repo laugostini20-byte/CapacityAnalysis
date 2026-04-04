@@ -48,3 +48,14 @@ CREATE TABLE IF NOT EXISTS scenario_profiles (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scenario_profiles_updated ON scenario_profiles (updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS lab_settings (
+  lab_key TEXT PRIMARY KEY,
+  lab_raw TEXT NOT NULL,
+  system_type TEXT NOT NULL DEFAULT 'caltrak' CHECK (system_type IN ('caltrak', 'indysoft')),
+  group_name TEXT,
+  productivity_pct NUMERIC(5,2) NOT NULL DEFAULT 70 CHECK (productivity_pct BETWEEN 1 AND 100),
+  days_per_week NUMERIC(4,2) NOT NULL DEFAULT 5 CHECK (days_per_week BETWEEN 1 AND 7),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
