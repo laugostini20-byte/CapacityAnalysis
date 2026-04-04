@@ -123,6 +123,8 @@ Two top-level views accessible via a persistent nav bar:
 1. **Status Board** — current state of all labs
 2. **Scenario Planner** — what-if modeling
 
+Clicking any lab row on the Status Board opens the **Lab Detail Modal** (see Section 6).
+
 App name: **CapacityIQ**. Light theme. Clean, modern, functional (no excessive color).
 
 ---
@@ -186,7 +188,54 @@ When any lab has a per-lab productivity override, the panel shows a note: "X lab
 
 ---
 
-## 6. Scenario Planner
+## 6. Lab Detail Modal
+
+### Trigger
+
+Clicking any lab row on the Status Board opens a modal overlay for that lab. Dismissible via close button or clicking outside.
+
+### Purpose
+
+Show how that lab's demand (std hours) has moved over time, and how this fiscal year compares to last fiscal year at the same point in the calendar.
+
+### Chart — Year-over-Year Demand
+
+A line chart with two series on the same axes:
+
+- **X-axis:** Fiscal year months, Apr → Mar (12 points)
+- **Y-axis:** Standard hours (weekly average)
+- **Line 1 — Last FY (e.g. FY 2024–25):** Plotted from monthly end-of-month snapshot values. 12 data points shown as dots connected by a line. This is the coarser data source (monthly snapshots were all that existed before Mar 2025).
+- **Line 2 — This FY (e.g. FY 2025–26):** Plotted from daily snapshots aggregated to weekly averages. Finer resolution. Stops at the current week — future months are blank (no projection).
+- **Capacity reference line:** A flat horizontal line showing current regular capacity (hrs/week) for the lab. Lets the user immediately see when demand crossed or approached capacity.
+- **"Today" marker:** A vertical dashed line at the current week's position on the x-axis.
+
+### Data Sources by Series
+
+| Series | Source | Granularity |
+|---|---|---|
+| Last FY | `lab_snapshots` monthly end-of-month rows | 1 point/month |
+| This FY | `lab_snapshots` daily rows aggregated to weekly avg | 1 point/week |
+| Capacity line | Current `labs` table (avail × productivity × days) | Static flat line |
+
+If a lab has no snapshot data for last FY (e.g. it was added recently), that line is omitted and a note is shown: "No prior-year data available."
+
+### Summary Stats (below the chart)
+
+Three quick-read numbers shown beneath the chart:
+
+| Stat | Definition |
+|---|---|
+| This FY avg | Average weekly std hrs this fiscal year to date |
+| Last FY avg | Average weekly std hrs across all of last fiscal year |
+| YoY change | (This FY avg − Last FY avg) ÷ Last FY avg × 100, shown as +/−% |
+
+### Header
+
+Modal header shows: lab name · current status badge · current Load % · current OT Hrs.
+
+---
+
+## 7. Scenario Planner
 
 ### Purpose
 
@@ -277,7 +326,7 @@ When a saved scenario is reloaded, it recalculates against the **current** basel
 
 ---
 
-## 7. Data Upload Flow
+## 8. Data Upload Flow
 
 Three upload types, each as CSV or Excel:
 
@@ -301,7 +350,7 @@ All uploads preview before commit. The preview shows: valid rows (count), reject
 
 ---
 
-## 8. Technical Architecture
+## 9. Technical Architecture
 
 ### Stack (retained from current tool)
 
@@ -325,7 +374,7 @@ All uploads preview before commit. The preview shows: valid rows (count), reject
 
 ---
 
-## 9. Out of Scope
+## 10. Out of Scope
 
 - Cost modeling (OT cost, labor cost, billing)
 - On-time delivery tracking or targets
