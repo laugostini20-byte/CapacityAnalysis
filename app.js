@@ -563,8 +563,11 @@ function updateWeekLabel() {
 function renderSummaryCards() {
   const all = st.labList;
   const counts = { over: 0, risk: 0, ok: 0 };
+  let totalOnsite = 0;
   all.forEach(lab => {
-    const s = baseMetrics(lab, st.view).status;
+    const m = baseMetrics(lab, st.view);
+    const s = m.status;
+    totalOnsite += m.onsite;
     if (counts[s] !== undefined) counts[s]++;
   });
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -572,6 +575,9 @@ function renderSummaryCards() {
   set('card-over',  counts.over);
   set('card-risk',  counts.risk);
   set('card-ok',    counts.ok);
+  set('card-onsite', fmt(totalOnsite, 1));
+  const onsiteSub = document.getElementById('card-onsite-sub');
+  if (onsiteSub) onsiteSub.textContent = `avg FTE away · ${st.view}`;
 }
 
 function setSegActive(groupId, val, labelMap) {

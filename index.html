@@ -97,12 +97,14 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:13px;backg
 .sum-over{border-top-color:#ef4444}
 .sum-risk{border-top-color:#f59e0b}
 .sum-ok{border-top-color:#22c55e}
+.sum-onsite{border-top-color:#0ea5e9}
 .sum-label{font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.4px}
 .sum-value{font-size:26px;font-weight:700;color:#18181b;line-height:1.1;margin-top:2px}
 .sum-total .sum-value{color:#6366f1}
 .sum-over .sum-value{color:#ef4444}
 .sum-risk .sum-value{color:#f59e0b}
 .sum-ok .sum-value{color:#16a34a}
+.sum-onsite .sum-value{color:#0284c7}
 .sum-sub{font-size:10px;color:#a1a1aa;margin-top:2px}
 
 /* MODALS */
@@ -251,6 +253,11 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:13px;backg
       <div class="sum-label">Healthy</div>
       <div class="sum-value" id="card-ok">—</div>
       <div class="sum-sub">within capacity</div>
+    </div>
+    <div class="sum-card sum-onsite">
+      <div class="sum-label">Techs Onsite</div>
+      <div class="sum-value" id="card-onsite">—</div>
+      <div class="sum-sub" id="card-onsite-sub">avg FTE away this period</div>
     </div>
   </div>
 
