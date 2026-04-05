@@ -208,6 +208,17 @@ function mapToCanonicalLabKey(rawLab) {
   return LAB_MAPPING.aliasToCanonicalKey[rawKey] ?? SCHEDULE_LAB_KEY_MAP[rawKey] ?? rawKey;
 }
 
+function resolveLabMatch(rawLab) {
+  const rawKey = normalizeLabKey(rawLab);
+  if (LAB_MAPPING.aliasToCanonicalKey[rawKey]) {
+    return {labKey: LAB_MAPPING.aliasToCanonicalKey[rawKey], matchType: 'mapping'};
+  }
+  if (SCHEDULE_LAB_KEY_MAP[rawKey]) {
+    return {labKey: SCHEDULE_LAB_KEY_MAP[rawKey], matchType: 'legacy_code'};
+  }
+  return {labKey: rawKey, matchType: 'unmapped'};
+}
+
 function isLabActiveByKey(labKey) {
   const key = normalizeLabKey(labKey);
   if (Object.prototype.hasOwnProperty.call(LAB_MAPPING.isActiveByCanonicalKey, key)) {
@@ -233,8 +244,10 @@ function parseRowsFromBuffer(file) {
 function parseScheduleEvents(rows) {
   const deduped = new Map();
   const issues = [];
+  const skipped = [];
 
   rows.forEach((row, idx) => {
+    const rowNumber = idx + 2;
     const labRawVal = getRowValueByHeaders(row, [
       'Lab',
       'Lab / Department',
@@ -252,40 +265,51 @@ function parseScheduleEvents(rows) {
     const techCount = parseHoursValue(techVal);
 
     if (!labRaw || !start || !end || techCount == null || techCount < 0) {
-      issues.push(`Row ${idx + 2} skipped due to missing/invalid Lab, Start, End, or Number of Tech`);
+      issues.push(`Row ${rowNumber} skipped due to missing/invalid Lab, Start, End, or Number of Tech`);
+      skipped.push({rowNumber, labRaw: labRaw || null, reason: 'missing_or_invalid_required_fields'});
       return;
     }
 
     const startDate = toISODateLocal(start);
     const endDate = toISODateLocal(end);
-    const labKey = mapToCanonicalLabKey(labRaw);
+    const match = resolveLabMatch(labRaw);
+    const labKey = match.labKey;
     if (!labKey) {
-      issues.push(`Row ${idx + 2} skipped due to unusable Lab value`);
+      issues.push(`Row ${rowNumber} skipped due to unusable Lab value`);
+      skipped.push({rowNumber, labRaw, reason: 'unusable_lab'});
       return;
     }
     if (!isLabActiveByKey(labKey)) {
-      issues.push(`Row ${idx + 2} skipped because "${labRaw}" maps to an inactive lab`);
+      issues.push(`Row ${rowNumber} skipped because "${labRaw}" maps to an inactive lab`);
+      skipped.push({rowNumber, labRaw, labKey, reason: 'inactive_lab'});
       return;
+    }
+    if (match.matchType === 'unmapped') {
+      issues.push(`Row ${rowNumber}: "${labRaw}" not found in mapping file; accepted as "${labKey}"`);
     }
 
     const key = `${labKey}|${startDate}|${endDate}`;
     deduped.set(key, {
+      rowNumber,
       labRaw,
       labKey,
+      matchType: match.matchType,
       startDate,
       endDate,
       techCount
     });
   });
 
-  return {events: [...deduped.values()], issues};
+  return {events: [...deduped.values()], issues, skipped};
 }
 
 function parseStdHoursOverrides(rows) {
   const deduped = new Map();
   const issues = [];
+  const skipped = [];
 
   rows.forEach((row, idx) => {
+    const rowNumber = idx + 2;
     const labRawVal = getRowValueByHeaders(row, [
       'Lab',
       'Lab / Department',
@@ -305,24 +329,31 @@ function parseStdHoursOverrides(rows) {
     const labRaw = String(labRawVal || '').trim();
     const stdHours = parseHoursValue(stdRaw);
     if (!labRaw || stdHours == null || stdHours < 0) {
-      issues.push(`Row ${idx + 2} skipped due to missing/invalid Lab or Std Hours`);
+      issues.push(`Row ${rowNumber} skipped due to missing/invalid Lab or Std Hours`);
+      skipped.push({rowNumber, labRaw: labRaw || null, reason: 'missing_or_invalid_required_fields'});
       return;
     }
 
-    const labKey = mapToCanonicalLabKey(labRaw);
+    const match = resolveLabMatch(labRaw);
+    const labKey = match.labKey;
     if (!labKey) {
-      issues.push(`Row ${idx + 2} skipped due to unusable Lab value`);
+      issues.push(`Row ${rowNumber} skipped due to unusable Lab value`);
+      skipped.push({rowNumber, labRaw, reason: 'unusable_lab'});
       return;
     }
     if (!isLabActiveByKey(labKey)) {
-      issues.push(`Row ${idx + 2} skipped because "${labRaw}" maps to an inactive lab`);
+      issues.push(`Row ${rowNumber} skipped because "${labRaw}" maps to an inactive lab`);
+      skipped.push({rowNumber, labRaw, labKey, reason: 'inactive_lab'});
       return;
     }
+    if (match.matchType === 'unmapped') {
+      issues.push(`Row ${rowNumber}: "${labRaw}" not found in mapping file; accepted as "${labKey}"`);
+    }
 
-    deduped.set(labKey, {labRaw, labKey, stdHours});
+    deduped.set(labKey, {rowNumber, labRaw, labKey, stdHours, matchType: match.matchType});
   });
 
-  return {overrides: [...deduped.values()], issues};
+  return {overrides: [...deduped.values()], issues, skipped};
 }
 
 async function ensureSchema() {
@@ -352,6 +383,7 @@ async function syncEvents(client, events, filename) {
   let inserted = 0;
   let updated = 0;
   let unchanged = 0;
+  const details = {inserted: [], updated: [], unchanged: []};
 
   for (const e of events) {
     const key = `${e.labKey}|${e.startDate}|${e.endDate}`;
@@ -364,12 +396,30 @@ async function syncEvents(client, events, filename) {
         [e.labRaw, e.labKey, e.startDate, e.endDate, e.techCount, filename]
       );
       inserted++;
+      details.inserted.push({
+        rowNumber: e.rowNumber,
+        labRaw: e.labRaw,
+        labKey: e.labKey,
+        matchType: e.matchType,
+        startDate: e.startDate,
+        endDate: e.endDate,
+        techCount: Number(e.techCount)
+      });
       continue;
     }
 
     const changed = existing.lab_raw !== e.labRaw || isTechCountDifferent(existing.tech_count, e.techCount);
     if (!changed) {
       unchanged++;
+      details.unchanged.push({
+        rowNumber: e.rowNumber,
+        labRaw: e.labRaw,
+        labKey: e.labKey,
+        matchType: e.matchType,
+        startDate: e.startDate,
+        endDate: e.endDate,
+        techCount: Number(e.techCount)
+      });
       continue;
     }
 
@@ -380,6 +430,16 @@ async function syncEvents(client, events, filename) {
       [e.labRaw, e.techCount, filename, existing.id]
     );
     updated++;
+    details.updated.push({
+      rowNumber: e.rowNumber,
+      labRaw: e.labRaw,
+      labKey: e.labKey,
+      matchType: e.matchType,
+      startDate: e.startDate,
+      endDate: e.endDate,
+      previousTechCount: Number(existing.tech_count),
+      techCount: Number(e.techCount)
+    });
   }
 
   const removed = 0;
@@ -389,7 +449,7 @@ async function syncEvents(client, events, filename) {
     [filename, inserted, updated, unchanged, removed]
   );
 
-  return {inserted, updated, unchanged, removed};
+  return {inserted, updated, unchanged, removed, details};
 }
 
 function isStdHoursDifferent(a, b) {
@@ -400,6 +460,7 @@ async function syncStdHoursOverrides(client, overrides, filename, effectiveFrom,
   let inserted = 0;
   let updated = 0;
   let unchanged = 0;
+  const details = {inserted: [], updated: [], unchanged: []};
 
   for (const row of overrides) {
     const existingRes = await client.query(
@@ -425,12 +486,30 @@ async function syncStdHoursOverrides(client, overrides, filename, effectiveFrom,
         [row.labRaw, row.labKey, row.stdHours, effectiveFrom, effectiveTo, filename]
       );
       inserted++;
+      details.inserted.push({
+        rowNumber: row.rowNumber,
+        labRaw: row.labRaw,
+        labKey: row.labKey,
+        matchType: row.matchType,
+        stdHours: Number(row.stdHours),
+        effectiveFrom,
+        effectiveTo
+      });
       continue;
     }
 
     const changed = existing.lab_raw !== row.labRaw || isStdHoursDifferent(existing.std_hours, row.stdHours);
     if (!changed) {
       unchanged++;
+      details.unchanged.push({
+        rowNumber: row.rowNumber,
+        labRaw: row.labRaw,
+        labKey: row.labKey,
+        matchType: row.matchType,
+        stdHours: Number(row.stdHours),
+        effectiveFrom,
+        effectiveTo
+      });
       continue;
     }
 
@@ -441,9 +520,19 @@ async function syncStdHoursOverrides(client, overrides, filename, effectiveFrom,
       [row.labRaw, row.stdHours, filename, existing.id]
     );
     updated++;
+    details.updated.push({
+      rowNumber: row.rowNumber,
+      labRaw: row.labRaw,
+      labKey: row.labKey,
+      matchType: row.matchType,
+      previousStdHours: Number(existing.std_hours),
+      stdHours: Number(row.stdHours),
+      effectiveFrom,
+      effectiveTo
+    });
   }
 
-  return {inserted, updated, unchanged};
+  return {inserted, updated, unchanged, details};
 }
 
 function dbRequired(res) {
@@ -557,11 +646,12 @@ app.post('/api/schedules/sync', upload.single('file'), async (req, res) => {
     return;
   }
 
-  const {events, issues} = parseScheduleEvents(rows);
+  const {events, issues, skipped} = parseScheduleEvents(rows);
   if (!events.length) {
     res.status(400).json({
       error: 'No valid schedule rows found. Expected columns like Lab, Start Time, End Time, Number of Tech.',
-      issues: issues.slice(0, 25)
+      issues: issues.slice(0, 50),
+      skipped: skipped.slice(0, 100)
     });
     return;
   }
@@ -575,7 +665,9 @@ app.post('/api/schedules/sync', upload.single('file'), async (req, res) => {
       summary,
       parsedRows: rows.length,
       validRows: events.length,
-      issues: issues.slice(0, 25)
+      skippedRows: skipped.length,
+      skipped: skipped.slice(0, 100),
+      issues: issues.slice(0, 50)
     });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -642,11 +734,12 @@ app.post('/api/std-hours/sync', upload.single('file'), async (req, res) => {
     return;
   }
 
-  const {overrides, issues} = parseStdHoursOverrides(rows);
+  const {overrides, issues, skipped} = parseStdHoursOverrides(rows);
   if (!overrides.length) {
     res.status(400).json({
       error: 'No valid std-hours rows found. Expected columns like Lab and Current Std Hours.',
-      issues: issues.slice(0, 25)
+      issues: issues.slice(0, 50),
+      skipped: skipped.slice(0, 100)
     });
     return;
   }
@@ -668,7 +761,9 @@ app.post('/api/std-hours/sync', upload.single('file'), async (req, res) => {
       validRows: overrides.length,
       effectiveFrom,
       effectiveTo,
-      issues: issues.slice(0, 25)
+      skippedRows: skipped.length,
+      skipped: skipped.slice(0, 100),
+      issues: issues.slice(0, 50)
     });
   } catch (err) {
     await client.query('ROLLBACK');
