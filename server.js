@@ -28,6 +28,77 @@ const pool = hasDatabase
   : null;
 
 const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+const LAB_MAPPING_CSV_PATH = path.join(__dirname, 'lab_mapping_variants.csv');
+
+function normalizeLabKey(v) {
+  return String(v || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function loadLabMapping(csvPath) {
+  const fallback = {
+    aliasToCanonicalKey: {},
+    canonicalLabByKey: {},
+    systemByCanonicalKey: {},
+    isActiveByCanonicalKey: {},
+    activeCanonicalKeys: []
+  };
+
+  if (!fs.existsSync(csvPath)) return fallback;
+
+  try {
+    const csvText = fs.readFileSync(csvPath, 'utf8');
+    const workbook = XLSX.read(csvText, {type: 'string'});
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval: ''});
+
+    const aliasToCanonicalKey = {};
+    const canonicalLabByKey = {};
+    const systemByCanonicalKey = {};
+    const isActiveByCanonicalKey = {};
+    const activeCanonicalKeys = [];
+
+    rows.forEach((row) => {
+      const canonicalLab = String(row['Canonical Lab'] || '').trim();
+      if (!canonicalLab) return;
+
+      const canonicalKey = normalizeLabKey(canonicalLab);
+      const system = String(row.System || '').trim().toLowerCase();
+      const status = String(row.Status || '').trim().toLowerCase();
+      const isActive = status === 'active';
+
+      canonicalLabByKey[canonicalKey] = canonicalLab;
+      if (system === 'caltrak' || system === 'indysoft') {
+        systemByCanonicalKey[canonicalKey] = system;
+      }
+      isActiveByCanonicalKey[canonicalKey] = isActive;
+      if (isActive) activeCanonicalKeys.push(canonicalKey);
+
+      aliasToCanonicalKey[canonicalKey] = canonicalKey;
+      for (let i = 1; i <= 5; i++) {
+        const variant = String(row[`Variant ${i}`] || '').trim();
+        if (!variant) continue;
+        aliasToCanonicalKey[normalizeLabKey(variant)] = canonicalKey;
+      }
+    });
+
+    return {
+      aliasToCanonicalKey,
+      canonicalLabByKey,
+      systemByCanonicalKey,
+      isActiveByCanonicalKey,
+      activeCanonicalKeys
+    };
+  } catch (err) {
+    console.error('Failed to parse lab mapping CSV:', err.message);
+    return fallback;
+  }
+}
+
+const LAB_MAPPING = loadLabMapping(LAB_MAPPING_CSV_PATH);
 
 function normalizeHeader(v) {
   return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -113,14 +184,6 @@ function normalizeScenarioConfig(raw) {
   };
 }
 
-function normalizeLabKey(v) {
-  return String(v || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 // Maps schedule export lab codes (e.g. "05 houston") to canonical BASE_LABS lab keys
 const SCHEDULE_LAB_KEY_MAP = {
   '01 rochester':    'rochester cal lab',
@@ -139,6 +202,19 @@ const SCHEDULE_LAB_KEY_MAP = {
   '61 palm beach':   'palm beach cal lab',
   'm5 st louis':     'st louis cal lab',
 };
+
+function mapToCanonicalLabKey(rawLab) {
+  const rawKey = normalizeLabKey(rawLab);
+  return LAB_MAPPING.aliasToCanonicalKey[rawKey] ?? SCHEDULE_LAB_KEY_MAP[rawKey] ?? rawKey;
+}
+
+function isLabActiveByKey(labKey) {
+  const key = normalizeLabKey(labKey);
+  if (Object.prototype.hasOwnProperty.call(LAB_MAPPING.isActiveByCanonicalKey, key)) {
+    return LAB_MAPPING.isActiveByCanonicalKey[key];
+  }
+  return true;
+}
 
 function parseRowsFromBuffer(file) {
   const ext = path.extname(file.originalname || '').toLowerCase();
@@ -182,10 +258,13 @@ function parseScheduleEvents(rows) {
 
     const startDate = toISODateLocal(start);
     const endDate = toISODateLocal(end);
-    const rawKey = normalizeLabKey(labRaw);
-    const labKey = SCHEDULE_LAB_KEY_MAP[rawKey] ?? rawKey;
+    const labKey = mapToCanonicalLabKey(labRaw);
     if (!labKey) {
       issues.push(`Row ${idx + 2} skipped due to unusable Lab value`);
+      return;
+    }
+    if (!isLabActiveByKey(labKey)) {
+      issues.push(`Row ${idx + 2} skipped because "${labRaw}" maps to an inactive lab`);
       return;
     }
 
@@ -230,9 +309,13 @@ function parseStdHoursOverrides(rows) {
       return;
     }
 
-    const labKey = normalizeLabKey(labRaw);
+    const labKey = mapToCanonicalLabKey(labRaw);
     if (!labKey) {
       issues.push(`Row ${idx + 2} skipped due to unusable Lab value`);
+      return;
+    }
+    if (!isLabActiveByKey(labKey)) {
+      issues.push(`Row ${idx + 2} skipped because "${labRaw}" maps to an inactive lab`);
       return;
     }
 
@@ -412,6 +495,24 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+app.get('/api/lab-mapping', (_req, res) => {
+  const activeLabs = LAB_MAPPING.activeCanonicalKeys.map((labKey) => ({
+    labKey,
+    canonicalLab: LAB_MAPPING.canonicalLabByKey[labKey] || labKey,
+    system: LAB_MAPPING.systemByCanonicalKey[labKey] || null,
+    status: 'active'
+  }));
+
+  res.json({
+    source: path.basename(LAB_MAPPING_CSV_PATH),
+    activeLabs,
+    aliasToCanonicalKey: LAB_MAPPING.aliasToCanonicalKey,
+    canonicalLabByKey: LAB_MAPPING.canonicalLabByKey,
+    systemByCanonicalKey: LAB_MAPPING.systemByCanonicalKey,
+    isActiveByCanonicalKey: LAB_MAPPING.isActiveByCanonicalKey
+  });
+});
+
 app.get('/api/schedules', async (req, res) => {
   if (!dbRequired(res)) return;
   const from = req.query.from ? String(req.query.from) : null;
@@ -419,7 +520,7 @@ app.get('/api/schedules', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT lab_raw, start_date::text AS start_date, end_date::text AS end_date, tech_count
+      `SELECT lab_raw, lab_key, start_date::text AS start_date, end_date::text AS end_date, tech_count
        FROM onsite_events
        WHERE ($1::date IS NULL OR end_date >= $1::date)
          AND ($2::date IS NULL OR start_date <= $2::date)
@@ -429,6 +530,7 @@ app.get('/api/schedules', async (req, res) => {
 
     const events = result.rows.map(r => ({
       lab: r.lab_raw,
+      labKey: r.lab_key,
       startDate: r.start_date,
       endDate: r.end_date,
       techCount: Number(r.tech_count)

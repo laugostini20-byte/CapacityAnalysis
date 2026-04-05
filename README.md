@@ -46,6 +46,13 @@ When a schedule file is uploaded:
 
 The response includes `inserted`, `updated`, and `unchanged` counts.
 
+## Lab Mapping + Active/Inactive Labs
+
+- The app reads aliases and lab status from `lab_mapping_variants.csv` in the project root.
+- Uploads map incoming lab aliases (e.g., `05 - houston`, `Houston Cal Lab`) to canonical lab keys before saving.
+- Rows that map to `Inactive` labs are skipped during upload and returned as warnings.
+- The UI only shows labs marked `Active` in `lab_mapping_variants.csv`.
+
 For standard-hours uploads:
 
 - Upload a CSV/XLSX/XLS file with columns like `Lab` and `Current Std Hours`.

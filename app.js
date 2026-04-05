@@ -37,6 +37,14 @@ const SCHEDULE_LAB_KEY_MAP = {
   'm5 st louis':     'st louis cal lab',
 };
 
+const EMPTY_LAB_MAPPING = Object.freeze({
+  aliasToCanonicalKey: {},
+  canonicalLabByKey: {},
+  systemByCanonicalKey: {},
+  isActiveByCanonicalKey: {},
+  activeLabKeySet: new Set(),
+});
+
 // Base lab list — only labs we actively track
 // CalTrak labs with std hours data + IndySoft labs (tracked separately)
 // Martin labs and other unmeasured non-IndySoft labs are excluded
@@ -99,6 +107,13 @@ const st = {
   labSettings: {},             // { labKey: { productivityPct, daysPerWeek, systemType } }
   scheduleEvents: [],          // from /api/schedules
   dbStdHrs: {},                // { labKey: stdHrsPerWeek } from DB
+  labMapping: {
+    aliasToCanonicalKey: {},
+    canonicalLabByKey: {},
+    systemByCanonicalKey: {},
+    isActiveByCanonicalKey: {},
+    activeLabKeySet: new Set(),
+  },
   dataDate: null,
   savedScenarios: [],
   scen: {
@@ -147,6 +162,20 @@ function isIndySoft(labName) { return INDYSOFT_LABS.has(labName); }
 function systemType(labName, settings) {
   if (settings?.systemType) return settings.systemType;
   return isIndySoft(labName) ? 'indysoft' : 'caltrak';
+}
+
+function mapToCanonicalLabKey(rawName) {
+  const raw = labKey(rawName);
+  return st.labMapping.aliasToCanonicalKey[raw] ?? SCHEDULE_LAB_KEY_MAP[raw] ?? raw;
+}
+
+function canonicalLabNameForKey(key, fallbackName) {
+  return st.labMapping.canonicalLabByKey[key] ?? fallbackName;
+}
+
+function isLabActive(key) {
+  if (!st.labMapping.activeLabKeySet.size) return true;
+  return st.labMapping.activeLabKeySet.has(key);
 }
 
 // ─── COMPUTED METRICS ────────────────────────────────────────────────────────
@@ -356,22 +385,30 @@ function onsiteFTE(labName, viewStr) {
 
 function buildLabList() {
   const labs = [];
+  const seen = new Set();
   for (const base of BASE_LABS) {
-    const key = labKey(base.lab);
+    const key = mapToCanonicalLabKey(base.lab);
+    if (seen.has(key)) continue;
+    if (!isLabActive(key)) continue;
+    seen.add(key);
+
     const settings = st.labSettings[key] ?? {};
     const dbEntry = st.dbStdHrs[key];
     const rawStdHrs = dbEntry?.stdHrsPerWeek ?? base.stdHrs;
+    const mappedSystem = st.labMapping.systemByCanonicalKey[key];
+    const isMappedIndy = mappedSystem === 'indysoft';
     // Only show labs that have actual demand data OR are IndySoft (tracked separately)
-    if (rawStdHrs == null && !isIndySoft(base.lab)) continue;
+    if (rawStdHrs == null && !isMappedIndy && !isIndySoft(base.lab)) continue;
     const stdHrs = rawStdHrs ?? 0;
-    const totalTechs = getLatestHeadcount(base.lab) ?? base.techs;
+    const displayName = canonicalLabNameForKey(key, base.lab);
+    const totalTechs = getLatestHeadcount(displayName) ?? getLatestHeadcount(base.lab) ?? base.techs;
     const productivityPct = settings.productivityPct ?? DEFAULT_PROD_PCT;
     const daysPerWeek = settings.daysPerWeek ?? 5;
 
     labs.push({
-      labName: base.lab,
+      labName: displayName,
       labKey: key,
-      systemType: systemType(base.lab, settings),
+      systemType: mappedSystem || systemType(base.lab, settings),
       totalTechs,
       productivityPct,
       daysPerWeek,
@@ -393,17 +430,43 @@ async function apiFetch(url, opts = {}) {
 
 async function loadData() {
   try {
-    const [stdHrsRes, schedulesRes, settingsRes, scenariosRes] = await Promise.allSettled([
+    st.dbStdHrs = {};
+    st.scheduleEvents = [];
+
+    const [mappingRes, stdHrsRes, schedulesRes, settingsRes, scenariosRes] = await Promise.allSettled([
+      apiFetch('/api/lab-mapping'),
       apiFetch('/api/std-hours/current'),
       apiFetch('/api/schedules'),
       apiFetch('/api/lab-settings'),
       apiFetch('/api/scenarios'),
     ]);
 
+    if (mappingRes.status === 'fulfilled') {
+      const map = mappingRes.value || EMPTY_LAB_MAPPING;
+      st.labMapping = {
+        aliasToCanonicalKey: map.aliasToCanonicalKey || {},
+        canonicalLabByKey: map.canonicalLabByKey || {},
+        systemByCanonicalKey: map.systemByCanonicalKey || {},
+        isActiveByCanonicalKey: map.isActiveByCanonicalKey || {},
+        activeLabKeySet: new Set((map.activeLabs || []).map(l => l.labKey).filter(Boolean)),
+      };
+    } else {
+      st.labMapping = {
+        aliasToCanonicalKey: {},
+        canonicalLabByKey: {},
+        systemByCanonicalKey: {},
+        isActiveByCanonicalKey: {},
+        activeLabKeySet: new Set(),
+      };
+    }
+
     if (stdHrsRes.status === 'fulfilled') {
       const { labs, dataDate } = stdHrsRes.value;
       st.dataDate = dataDate;
-      labs.forEach(l => { st.dbStdHrs[l.labKey] = l; });
+      labs.forEach(l => {
+        const key = mapToCanonicalLabKey(l.labKey || l.labRaw);
+        if (isLabActive(key)) st.dbStdHrs[key] = {...l, labKey: key};
+      });
       if (dataDate) {
         const d = new Date(dataDate + 'T00:00:00');
         document.getElementById('data-date-label').textContent =
@@ -413,18 +476,24 @@ async function loadData() {
 
     if (schedulesRes.status === 'fulfilled') {
       st.scheduleEvents = (schedulesRes.value.events ?? []).map(e => {
-        const raw = labKey(e.lab);
+        const raw = e.labKey || e.lab;
         return {
-          labKey: SCHEDULE_LAB_KEY_MAP[raw] ?? raw,  // remap legacy "05 houston" → "houston cal lab"
+          labKey: mapToCanonicalLabKey(raw),
           startDate: e.startDate,
           endDate: e.endDate,
           techCount: e.techCount,
         };
-      });
+      }).filter(e => isLabActive(e.labKey));
     }
 
     if (settingsRes.status === 'fulfilled') {
-      st.labSettings = settingsRes.value.settings ?? {};
+      const rawSettings = settingsRes.value.settings ?? {};
+      const mapped = {};
+      Object.entries(rawSettings).forEach(([rawKey, val]) => {
+        const canonicalKey = mapToCanonicalLabKey(rawKey);
+        mapped[canonicalKey] = val;
+      });
+      st.labSettings = mapped;
     }
 
     if (scenariosRes.status === 'fulfilled') {
