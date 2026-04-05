@@ -100,7 +100,7 @@ const st = {
   view: 'weekly',
   tab: 'status-board',
   weekOffset: 0,               // weeks forward/back from today (for week nav)
-  filters: { system: 'all', status: 'all', selectedLabs: new Set() },
+  filters: { system: 'caltrak', status: 'all', selectedLabs: new Set() },
   sortKey: 'load',
   sortDir: -1,                 // -1 = desc (highest load first)
   labList: [],                 // final computed array of lab objects

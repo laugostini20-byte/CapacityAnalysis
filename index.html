@@ -51,6 +51,8 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .lab-picker-option:hover{background:#e8f1f8}
 .lab-picker-option input{margin:0}
 .lab-picker-empty{padding:10px;font-size:12px;color:#6b7a90;border-top:1px solid #d0dce8}
+#table-header-lab-picker{position:absolute;left:10px;top:8px;z-index:220;width:300px;max-width:42%}
+#table-header-lab-picker .lab-picker{margin-left:0;max-width:none;min-width:0}
 
 /* ASSUMPTIONS */
 #assumptions-panel{background:#fff;border:1px solid #d0dce8;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#4d4d4d;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
@@ -62,7 +64,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .assumption-note{color:#f59e0b;font-weight:500;margin-top:4px}
 
 /* STATUS TABLE */
-#status-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #d0dce8;background:#fff;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
+#status-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #d0dce8;background:#fff;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05);position:relative}
 #status-table{width:100%;border-collapse:collapse;font-size:12px}
 #status-table thead th{padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#dbe6f3;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #0f2f4f;white-space:nowrap;background:#002342;cursor:pointer;user-select:none}
 #status-table thead th:first-child,#status-table thead th:nth-child(2),#status-table thead th:nth-child(3){text-align:left}
@@ -290,8 +292,8 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
     <div class="filter-group">
       <span class="filter-label">System</span>
       <div class="seg-group" id="seg-system">
-        <button class="seg-btn active" onclick="setFilter('system','all')">All</button>
-        <button class="seg-btn" onclick="setFilter('system','caltrak')">CalTrak</button>
+        <button class="seg-btn" onclick="setFilter('system','all')">All</button>
+        <button class="seg-btn active" onclick="setFilter('system','caltrak')">CalTrak</button>
         <button class="seg-btn" onclick="setFilter('system','indysoft')">IndySoft</button>
       </div>
     </div>
@@ -313,13 +315,6 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
         <button class="seg-btn" onclick="setView('yearly')">Yearly</button>
       </div>
     </div>
-    <div class="lab-picker" id="lab-picker">
-      <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
-        <span id="lab-picker-summary">All labs</span>
-        <span class="lab-picker-caret">▾</span>
-      </button>
-      <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
-    </div>
   </div>
 
   <details id="assumptions-panel">
@@ -334,6 +329,15 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
   </details>
 
   <div id="status-table-wrap">
+    <div id="table-header-lab-picker">
+      <div class="lab-picker" id="lab-picker">
+        <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
+          <span id="lab-picker-summary">All labs</span>
+          <span class="lab-picker-caret">▾</span>
+        </button>
+        <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
+      </div>
+    </div>
     <table id="status-table">
       <thead>
         <tr>
