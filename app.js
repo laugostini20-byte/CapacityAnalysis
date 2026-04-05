@@ -349,6 +349,31 @@ function getLatestHeadcount(labName) {
   return null;
 }
 
+function monthKeyFromDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getHeadcountForDate(labName, refDate) {
+  const hc = typeof HARDCODED_MONTHLY_HEADCOUNT !== 'undefined' ? HARDCODED_MONTHLY_HEADCOUNT : {};
+  const keys = Object.keys(hc).sort();
+  if (!keys.length) return null;
+  const target = monthKeyFromDate(refDate);
+
+  // Primary: nearest month at or before target.
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (keys[i] > target) continue;
+    const v = hc[keys[i]]?.[labName];
+    if (v != null) return v;
+  }
+  // Fallback: earliest month after target.
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i] < target) continue;
+    const v = hc[keys[i]]?.[labName];
+    if (v != null) return v;
+  }
+  return null;
+}
+
 // Reference date — today offset by weekOffset weeks (used for week nav)
 function referenceDate() {
   const d = new Date();
@@ -424,6 +449,7 @@ function onsiteTechDays(labName, viewStr) {
 function buildLabList() {
   const labs = [];
   const seen = new Set();
+  const refDate = referenceDate();
   for (const base of BASE_LABS) {
     const key = mapToCanonicalLabKey(base.lab);
     if (seen.has(key)) continue;
@@ -439,7 +465,7 @@ function buildLabList() {
     if (rawStdHrs == null && !isMappedIndy && !isIndySoft(base.lab)) continue;
     const stdHrs = rawStdHrs ?? 0;
     const displayName = canonicalLabNameForKey(key, base.lab);
-    const totalTechs = getLatestHeadcount(displayName) ?? getLatestHeadcount(base.lab) ?? base.techs;
+    const totalTechs = getHeadcountForDate(displayName, refDate) ?? getHeadcountForDate(base.lab, refDate) ?? getLatestHeadcount(displayName) ?? getLatestHeadcount(base.lab) ?? base.techs;
     const productivityPct = settings.productivityPct ?? DEFAULT_PROD_PCT;
     const daysPerWeek = settings.daysPerWeek ?? 5;
 
@@ -847,6 +873,7 @@ function sortedLabs(labs) {
 }
 
 function renderStatusBoard() {
+  buildLabList();
   updateWeekLabel();
   renderSummaryCards();
   renderLabPickerOptions();
