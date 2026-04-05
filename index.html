@@ -325,7 +325,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
     <summary>Assumptions</summary>
     <div class="assumption-body">
       Shift: 8 hrs &nbsp;·&nbsp; Default productivity: 70% (5.6 hrs/day) &nbsp;·&nbsp;
-      Weeks/month: 4.33 &nbsp;·&nbsp; Weeks/quarter: 13 &nbsp;·&nbsp; Weeks/year: 52
+      Weeks/month: 4.33 &nbsp;·&nbsp; Weeks/quarter: 12.99 &nbsp;·&nbsp; Weeks/year: 51.96
       <div class="assumption-note" id="prod-override-note" hidden>
         Some labs have custom productivity settings — see Prod % column.
       </div>
@@ -349,11 +349,10 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
           <th onclick="sortBy('margin')" id="th-margin" title="Capacity minus Demand. Positive means headroom; negative means shortfall. Click to sort.">Margin</th>
           <th onclick="sortBy('load')" title="Demand divided by Capacity (percent). Click to sort.">Load %</th>
           <th onclick="sortBy('ot')" id="th-ot" title="Hours above regular capacity: max(0, Demand - Capacity). Click to sort.">OT Hrs</th>
-          <th onclick="sortBy('trend')" title="Recent demand direction from historical snapshots: Rising, Flat, or Falling. Click to sort.">Trend</th>
         </tr>
       </thead>
       <tbody id="status-tbody">
-        <tr class="empty-row"><td colspan="14">Loading…</td></tr>
+        <tr class="empty-row"><td colspan="13">Loading…</td></tr>
       </tbody>
     </table>
   </div>

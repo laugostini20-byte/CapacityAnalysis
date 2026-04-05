@@ -4,8 +4,8 @@
 const SHIFT_HRS = 8;
 const DEFAULT_PROD_PCT = 70;
 const WEEKS_PER_MONTH = 4.33;
-const WEEKS_PER_QTR = 13;
-const WEEKS_PER_YEAR = 52;
+const WEEKS_PER_QTR = WEEKS_PER_MONTH * 3;
+const WEEKS_PER_YEAR = WEEKS_PER_QTR * 4;
 
 const VIEW_SCALE = { weekly: 1, monthly: WEEKS_PER_MONTH, quarterly: WEEKS_PER_QTR, yearly: WEEKS_PER_YEAR };
 const VIEW_LABEL = { weekly: 'Wk', monthly: 'Mo', quarterly: 'Qtr', yearly: 'FY' };
@@ -387,12 +387,12 @@ function getPeriodDates(viewStr) {
     return {
       start: localStr(new Date(qStartYear, qStartCal, 1)),
       end: localStr(new Date(qEndYear, qEndCal + 1, 0)),
-      workDays: 5 * 13,
+      workDays: Math.round(5 * WEEKS_PER_QTR),
     };
   }
   // yearly — current fiscal year Apr–Mar
   const fyStart = m >= 3 ? y : y - 1;
-  return { start: `${fyStart}-04-01`, end: `${fyStart+1}-03-31`, workDays: 5 * 52 };
+  return { start: `${fyStart}-04-01`, end: `${fyStart+1}-03-31`, workDays: Math.round(5 * WEEKS_PER_YEAR) };
 }
 
 // FTE of techs away from lab doing onsite customer work during the view period
@@ -839,12 +839,6 @@ function sortedLabs(labs) {
       case 'load':     va = ma.loadPct; vb = mb.loadPct; break;
       case 'ot':       va = ma.otHrs; vb = mb.otHrs; break;
       case 'hist':     va = historicalAvg(a.labName, st.view) ?? -1; vb = historicalAvg(b.labName, st.view) ?? -1; break;
-      case 'trend': {
-        const tmap = { up: 2, flat: 1, down: 0, null: -1 };
-        va = tmap[computeTrend(a.labName)] ?? -1;
-        vb = tmap[computeTrend(b.labName)] ?? -1;
-        break;
-      }
       default: va = 0; vb = 0;
     }
     if (typeof va === 'string') return st.sortDir * va.localeCompare(vb);
@@ -859,7 +853,7 @@ function renderStatusBoard() {
   const labs = sortedLabs(filteredLabs());
   const tbody = document.getElementById('status-tbody');
   if (!labs.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="14">No labs match the current filters.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="13">No labs match the current filters.</td></tr>';
     return;
   }
 
@@ -873,17 +867,8 @@ function renderStatusBoard() {
 
   tbody.innerHTML = labs.map(lab => {
     const m = baseMetrics(lab, st.view);
-    const trend = computeTrend(lab.labName);
     const sysType = lab.systemType;
     const lc = m.status;
-
-    const trendHtml = trend === 'up'
-      ? '<span class="trend-up">↑ Rising</span>'
-      : trend === 'down'
-        ? '<span class="trend-down">↓ Falling</span>'
-        : trend === 'flat'
-          ? '<span class="trend-flat">→ Flat</span>'
-          : '<span style="color:#d4d4d8">—</span>';
 
     const loadClass = lc === 'over' ? 'load-over' : lc === 'risk' ? 'load-risk' : 'load-ok';
     const marginClass = m.margin >= 0 ? 'margin-pos' : 'margin-neg';
@@ -908,7 +893,6 @@ function renderStatusBoard() {
       <td class="td-num ${marginClass}">${fmtSgn(m.margin, 0)}</td>
       <td class="td-num ${loadClass}">${fmt(m.loadPct, 1)}%</td>
       <td class="td-num ${otClass}">${m.otHrs > 0 ? fmtInt(m.otHrs) : '—'}</td>
-      <td class="td-num">${trendHtml}</td>
     </tr>`;
   }).join('');
 }
