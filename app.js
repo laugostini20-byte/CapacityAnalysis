@@ -1189,9 +1189,11 @@ function buildMonthlySnapshot(lab, monthKey) {
   if (!range) return buildEmptyMonthlySnapshot(monthKey);
   const demand = getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH;
   const techs = getChartHeadcountForDate(lab.labName, range.refDate) ?? lab.totalTechs;
-  const workDays = Math.round(5 * WEEKS_PER_MONTH);
-  const onsite = workDays > 0 ? onsiteTechDaysForRange(lab.labName, range.startDate, range.endDate) / workDays : 0;
-  const avail = Math.max(0, techs - onsite);
+  // Keep year-over-year chart comparisons on a like-for-like basis by using
+  // headcount-based capacity only. Historical onsite schedules are not loaded,
+  // so subtracting onsite only from the current year overstates 2026 load.
+  const onsite = 0;
+  const avail = techs;
   const capacity = avail * (SHIFT_HRS * lab.productivityPct / 100) * lab.daysPerWeek * WEEKS_PER_MONTH;
   const load = capacity > 0 ? (demand / capacity) * 100 : (demand > 0 ? Infinity : 0);
   const ot = demand != null ? Math.max(0, demand - capacity) : null;
