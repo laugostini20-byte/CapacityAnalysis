@@ -1375,8 +1375,9 @@ function resetScenario() {
 }
 
 // ─── UPLOAD ───────────────────────────────────────────────────────────────────
-function openUploadModal() {
+function openUploadModal(defaultTab = 'std-hours') {
   document.getElementById('upload-modal').removeAttribute('hidden');
+  switchUploadTab(defaultTab);
 }
 
 function closeUploadModal() {
