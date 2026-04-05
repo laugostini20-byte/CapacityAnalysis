@@ -375,19 +375,21 @@ function getHistoricalWipForMonth(labName, monthKey) {
   if (!dates.length) return null;
   const monthPrefix = `${monthKey}-`;
   const lookupKeys = historicalLabLookupKeys(labName);
-  let latestValue = null;
+  let total = 0;
+  let count = 0;
   for (const dateStr of dates) {
     if (!dateStr.startsWith(monthPrefix)) continue;
     const labs = daily[dateStr] || {};
     for (const key of lookupKeys) {
       const raw = labs[key];
       if (raw != null && Number.isFinite(Number(raw))) {
-        latestValue = Number(raw);
+        total += Number(raw);
+        count += 1;
         break;
       }
     }
   }
-  return latestValue;
+  return count ? total / count : null;
 }
 
 function hasHistoricalWipForLab(labName) {
