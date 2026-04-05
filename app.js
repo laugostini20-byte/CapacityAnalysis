@@ -1395,7 +1395,7 @@ function latestMetricIndex(values) {
   return null;
 }
 
-function buildMonthlySnapshot(lab, monthKey) {
+function buildHistoricalMonthlySnapshot(lab, monthKey) {
   const range = monthRangeFromKey(monthKey);
   if (!range) return buildEmptyMonthlySnapshot(monthKey);
   const historicalDemand = getHistoricalWipForMonth(lab.labName, monthKey);
@@ -1417,11 +1417,27 @@ function buildMonthlySnapshot(lab, monthKey) {
   return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
 }
 
-function buildYearMonthlySnapshots(lab, year, truncateAfterIndex = null) {
+function buildLiveMonthlySnapshot(lab, monthKey) {
+  const range = monthRangeFromKey(monthKey);
+  if (!range) return buildEmptyMonthlySnapshot(monthKey);
+  const demand = getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH;
+  const techs = getChartHeadcountForDate(lab.labName, range.refDate) ?? lab.totalTechs;
+  const periodWorkDays = Math.max(1, lab.daysPerWeek * WEEKS_PER_MONTH);
+  const onsite = onsiteTechDaysForRange(lab.labName, range.startDate, range.endDate) / periodWorkDays;
+  const avail = Math.max(0, techs - onsite);
+  const capacity = avail * (SHIFT_HRS * lab.productivityPct / 100) * periodWorkDays;
+  const load = capacity > 0 ? (demand / capacity) * 100 : (demand > 0 ? Infinity : 0);
+  const ot = Math.max(0, demand - capacity);
+  return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
+}
+
+function buildYearMonthlySnapshots(lab, year, truncateAfterIndex = null, source = 'live') {
   return CAL_MONTH_SUFFIXES.map((_, idx) => {
     const monthKey = monthKeyForYearIndex(year, idx);
     if (truncateAfterIndex != null && idx > truncateAfterIndex) return buildEmptyMonthlySnapshot(monthKey);
-    return buildMonthlySnapshot(lab, monthKey);
+    return source === 'historical'
+      ? buildHistoricalMonthlySnapshot(lab, monthKey)
+      : buildLiveMonthlySnapshot(lab, monthKey);
   });
 }
 
@@ -1460,8 +1476,8 @@ function buildLabChart(lab) {
   const baselineYear = currentYear - 1;
   const currentMonthIdx = calendarMonthIndexFromDate(referenceDate());
 
-  const thisSnapshots = buildYearMonthlySnapshots(lab, baselineYear);
-  const prevSnapshots = buildYearMonthlySnapshots(lab, currentYear, currentMonthIdx);
+  const thisSnapshots = buildYearMonthlySnapshots(lab, baselineYear, null, 'historical');
+  const prevSnapshots = buildYearMonthlySnapshots(lab, currentYear, currentMonthIdx, 'live');
   const sanitize = v => (v != null && Number.isFinite(v) ? v : null);
   const thisValues = thisSnapshots.map(s => sanitize(getMetricValue(s, metric)));
   const prevValues = prevSnapshots.map(s => sanitize(getMetricValue(s, metric)));
