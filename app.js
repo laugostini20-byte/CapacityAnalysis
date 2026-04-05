@@ -198,13 +198,14 @@ function baseMetrics(lab, viewStr) {
   const s = scale(viewStr);
   const hrsPerDay = SHIFT_HRS * (lab.productivityPct / 100);
   const demand = (lab.stdHrsPerWeek ?? 0) * s;
-  const avail = Math.max(0, lab.totalTechs - onsiteFTE(lab.labName, viewStr));
+  const onsite = onsiteFTE(lab.labName, viewStr);
+  const avail = Math.max(0, lab.totalTechs - onsite);
   const capacity = avail * hrsPerDay * lab.daysPerWeek * s;
   const margin = capacity - demand;
   const loadPct = capacity > 0 ? (demand / capacity) * 100 : (demand > 0 ? Infinity : 0);
   const otHrs = Math.max(0, demand - capacity);
   const status = getStatus(loadPct);
-  return { demand, capacity, margin, loadPct, otHrs, avail, status };
+  return { demand, capacity, margin, loadPct, otHrs, onsite, avail, status };
 }
 
 // Scenario metrics (OT-boosted capacity for load/margin/status; raw capacity for OT Hrs)
@@ -632,6 +633,7 @@ function sortedLabs(labs) {
       case 'system':   va = a.systemType; vb = b.systemType; break;
       case 'status':   va = ma.loadPct; vb = mb.loadPct; break;
       case 'techs':    va = a.totalTechs; vb = b.totalTechs; break;
+      case 'onsite':   va = ma.onsite; vb = mb.onsite; break;
       case 'avail':    va = baseMetrics(a, st.view).avail; vb = baseMetrics(b, st.view).avail; break;
       case 'prod':     va = a.productivityPct; vb = b.productivityPct; break;
       case 'demand':   va = ma.demand; vb = mb.demand; break;
@@ -659,7 +661,7 @@ function renderStatusBoard() {
   const labs = sortedLabs(filteredLabs());
   const tbody = document.getElementById('status-tbody');
   if (!labs.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="13">No labs match the current filters.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="14">No labs match the current filters.</td></tr>';
     return;
   }
 
@@ -694,6 +696,7 @@ function renderStatusBoard() {
       <td><span class="badge ${sysType === 'indysoft' ? 'badge-indysoft' : 'badge-caltrak'}">${sysType === 'indysoft' ? 'IndySoft' : 'CalTrak'}</span></td>
       <td><span class="badge ${statusBadgeClass(lc)}">${statusLabel(lc)}</span></td>
       <td class="td-num">${lab.totalTechs}</td>
+      <td class="td-num">${fmt(m.onsite, 1)}</td>
       <td class="td-num">${fmt(m.avail, 1)}</td>
       <td class="td-num" onclick="event.stopPropagation()">
         <input class="prod-input" type="number" min="1" max="100"
