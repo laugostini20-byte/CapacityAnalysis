@@ -343,6 +343,67 @@ function historicalAvg(labName, viewStr) {
   return null;
 }
 
+function getHistoricalWipSource() {
+  const live = st.historicalWipDaily || {};
+  if (Object.keys(live).length) {
+    return {
+      daily: live,
+      dates: st.historicalWipDates.length ? st.historicalWipDates : Object.keys(live).sort(),
+    };
+  }
+  const fallback = typeof HARDCODED_STD_HOURS_DAILY !== 'undefined' ? HARDCODED_STD_HOURS_DAILY : {};
+  return {
+    daily: fallback,
+    dates: Object.keys(fallback).sort(),
+  };
+}
+
+function historicalLabLookupKeys(labName) {
+  const canonicalKey = mapToCanonicalLabKey(labName);
+  const canonicalName = canonicalLabNameForKey(canonicalKey, labName);
+  return [...new Set([
+    labKey(labName),
+    labKey(canonicalName),
+    canonicalKey,
+    labName,
+    canonicalName,
+  ].filter(Boolean))];
+}
+
+function getHistoricalWipForMonth(labName, monthKey) {
+  const { daily, dates } = getHistoricalWipSource();
+  if (!dates.length) return null;
+  const monthPrefix = `${monthKey}-`;
+  const lookupKeys = historicalLabLookupKeys(labName);
+  let latestValue = null;
+  for (const dateStr of dates) {
+    if (!dateStr.startsWith(monthPrefix)) continue;
+    const labs = daily[dateStr] || {};
+    for (const key of lookupKeys) {
+      const raw = labs[key];
+      if (raw != null && Number.isFinite(Number(raw))) {
+        latestValue = Number(raw);
+        break;
+      }
+    }
+  }
+  return latestValue;
+}
+
+function hasHistoricalWipForLab(labName) {
+  const { daily, dates } = getHistoricalWipSource();
+  if (!dates.length) return false;
+  const lookupKeys = historicalLabLookupKeys(labName);
+  for (const dateStr of dates) {
+    const labs = daily[dateStr] || {};
+    for (const key of lookupKeys) {
+      const raw = labs[key];
+      if (raw != null && Number.isFinite(Number(raw))) return true;
+    }
+  }
+  return false;
+}
+
 // ─── DATA LAYER ──────────────────────────────────────────────────────────────
 function monthKeyFromDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -1335,7 +1396,11 @@ function latestMetricIndex(values) {
 function buildMonthlySnapshot(lab, monthKey) {
   const range = monthRangeFromKey(monthKey);
   if (!range) return buildEmptyMonthlySnapshot(monthKey);
-  const demand = getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH;
+  const historicalDemand = getHistoricalWipForMonth(lab.labName, monthKey);
+  const useHistoricalDemand = historicalDemand != null || hasHistoricalWipForLab(lab.labName);
+  const demand = historicalDemand != null
+    ? historicalDemand
+    : (useHistoricalDemand ? null : getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH);
   const techs = getChartHeadcountForDate(lab.labName, range.refDate) ?? lab.totalTechs;
   // Keep year-over-year chart comparisons on a like-for-like basis by using
   // headcount-based capacity only. Historical onsite schedules are not loaded,
@@ -1343,8 +1408,10 @@ function buildMonthlySnapshot(lab, monthKey) {
   const onsite = 0;
   const avail = techs;
   const capacity = avail * (SHIFT_HRS * lab.productivityPct / 100) * lab.daysPerWeek * WEEKS_PER_MONTH;
-  const load = capacity > 0 ? (demand / capacity) * 100 : (demand > 0 ? Infinity : 0);
-  const ot = demand != null ? Math.max(0, demand - capacity) : null;
+  const load = demand != null && Number.isFinite(demand)
+    ? (capacity > 0 ? (demand / capacity) * 100 : (demand > 0 ? Infinity : 0))
+    : null;
+  const ot = demand != null && Number.isFinite(demand) ? Math.max(0, demand - capacity) : null;
   return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
 }
 
