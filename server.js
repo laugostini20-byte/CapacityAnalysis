@@ -29,6 +29,8 @@ const pool = hasDatabase
 
 const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 const LAB_MAPPING_CSV_PATH = path.join(__dirname, 'lab_mapping_variants.csv');
+const HISTORICAL_WIP_XLSX_PATH = path.join(__dirname, 'historical wip caltrak labs.xlsx');
+const HISTORICAL_WIP_CATEGORY = 'Workable WIP Std. Hrs.';
 
 function normalizeLabKey(v) {
   return String(v || '')
@@ -99,6 +101,87 @@ function loadLabMapping(csvPath) {
 }
 
 const LAB_MAPPING = loadLabMapping(LAB_MAPPING_CSV_PATH);
+
+function excelDateToISO(v) {
+  if (typeof v === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(v);
+    if (parsed && parsed.y && parsed.m && parsed.d) {
+      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+    }
+  }
+  if (v instanceof Date && !Number.isNaN(v.valueOf())) {
+    return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+function loadHistoricalWipFromWorkbook(xlsxPath) {
+  const fallback = {
+    source: path.basename(xlsxPath),
+    category: HISTORICAL_WIP_CATEGORY,
+    dailyByDate: {},
+    range: {start: null, end: null},
+    labs: [],
+    loaded: false,
+    message: 'Historical WIP workbook not found'
+  };
+
+  if (!fs.existsSync(xlsxPath)) return fallback;
+
+  try {
+    const wb = XLSX.readFile(xlsxPath);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: null});
+    if (!rows.length) return fallback;
+
+    const header = rows[0] || [];
+    const dateCols = [];
+    for (let c = 3; c < header.length; c++) {
+      const iso = excelDateToISO(header[c]);
+      if (iso) dateCols.push({idx: c, date: iso});
+    }
+
+    const dailyByDate = {};
+    const labSet = new Set();
+    for (const dc of dateCols) dailyByDate[dc.date] = {};
+
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const category = String(row[2] || '').trim();
+      if (category !== HISTORICAL_WIP_CATEGORY) continue;
+
+      const labRaw = String(row[1] || '').trim();
+      if (!labRaw) continue;
+      const labNormalized = normalizeLabKey(labRaw);
+      labSet.add(labRaw);
+
+      for (const dc of dateCols) {
+        const v = row[dc.idx];
+        if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+        dailyByDate[dc.date][labNormalized] = Number(v);
+      }
+    }
+
+    const dates = Object.keys(dailyByDate).sort();
+    return {
+      source: path.basename(xlsxPath),
+      category: HISTORICAL_WIP_CATEGORY,
+      dailyByDate,
+      range: {start: dates[0] || null, end: dates[dates.length - 1] || null},
+      labs: [...labSet].sort((a, b) => a.localeCompare(b)),
+      loaded: true,
+      message: null
+    };
+  } catch (err) {
+    return {
+      ...fallback,
+      loaded: false,
+      message: `Failed to parse workbook: ${err.message}`
+    };
+  }
+}
+
+const HISTORICAL_WIP = loadHistoricalWipFromWorkbook(HISTORICAL_WIP_XLSX_PATH);
 
 function normalizeHeader(v) {
   return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -600,6 +683,10 @@ app.get('/api/lab-mapping', (_req, res) => {
     systemByCanonicalKey: LAB_MAPPING.systemByCanonicalKey,
     isActiveByCanonicalKey: LAB_MAPPING.isActiveByCanonicalKey
   });
+});
+
+app.get('/api/historical-wip', (_req, res) => {
+  res.json(HISTORICAL_WIP);
 });
 
 app.get('/api/schedules', async (req, res) => {

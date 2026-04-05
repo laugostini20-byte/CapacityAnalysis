@@ -53,6 +53,11 @@ The response includes `inserted`, `updated`, and `unchanged` counts.
 - Rows that map to `Inactive` labs are skipped during upload and returned as warnings.
 - The UI only shows labs marked `Active` in `lab_mapping_variants.csv`.
 
+## Historical WIP Source
+
+- LY peak values on the Status Board are sourced from `historical wip caltrak labs.xlsx` (sheet `WIP`, category `Workable WIP Std. Hrs.`).
+- The server exposes this via `GET /api/historical-wip`, and the frontend uses it for the `LY Wk Peak` calculation.
+
 For standard-hours uploads:
 
 - Upload a CSV/XLSX/XLS file with columns like `Lab` and `Current Std Hours`.

@@ -107,6 +107,7 @@ const st = {
   labSettings: {},             // { labKey: { productivityPct, daysPerWeek, systemType } }
   scheduleEvents: [],          // from /api/schedules
   dbStdHrs: {},                // { labKey: stdHrsPerWeek } from DB
+  historicalWipDaily: {},      // { 'YYYY-MM-DD': { normalizedLabKey: value } }
   labMapping: {
     aliasToCanonicalKey: {},
     canonicalLabByKey: {},
@@ -265,7 +266,9 @@ function computeTrend(labName) {
 // Weekly: same Mon–Sun last year. Monthly: same calendar month LY. Etc.
 function historicalAvg(labName, viewStr) {
   const daily = typeof HARDCODED_STD_HOURS_DAILY !== 'undefined' ? HARDCODED_STD_HOURS_DAILY : {};
-  if (!Object.keys(daily).length) return null;
+  const histDaily = st.historicalWipDaily;
+  const useDaily = Object.keys(histDaily).length ? histDaily : daily;
+  if (!Object.keys(useDaily).length) return null;
 
   const now = referenceDate();
   // Shift back exactly one year
@@ -304,9 +307,10 @@ function historicalAvg(labName, viewStr) {
 
   // Find peak daily WIP in that window
   let peak = null;
-  for (const [dateStr, labs] of Object.entries(daily)) {
+  const normLab = labKey(labName);
+  for (const [dateStr, labs] of Object.entries(useDaily)) {
     if (dateStr < lyStart || dateStr > lyEnd) continue;
-    const v = labs[labName];
+    const v = labs[normLab] ?? labs[labName];
     if (v != null && (peak === null || v > peak)) peak = v;
   }
   return peak;
@@ -444,13 +448,15 @@ async function loadData() {
   try {
     st.dbStdHrs = {};
     st.scheduleEvents = [];
+    st.historicalWipDaily = {};
 
-    const [mappingRes, stdHrsRes, schedulesRes, settingsRes, scenariosRes] = await Promise.allSettled([
+    const [mappingRes, stdHrsRes, schedulesRes, settingsRes, scenariosRes, historicalWipRes] = await Promise.allSettled([
       apiFetch('/api/lab-mapping'),
       apiFetch('/api/std-hours/current'),
       apiFetch('/api/schedules'),
       apiFetch('/api/lab-settings'),
       apiFetch('/api/scenarios'),
+      apiFetch('/api/historical-wip'),
     ]);
 
     if (mappingRes.status === 'fulfilled') {
@@ -511,6 +517,12 @@ async function loadData() {
     if (scenariosRes.status === 'fulfilled') {
       st.savedScenarios = scenariosRes.value.scenarios ?? [];
       renderScenarioDropdown();
+    }
+
+    if (historicalWipRes.status === 'fulfilled') {
+      st.historicalWipDaily = historicalWipRes.value.dailyByDate ?? {};
+    } else {
+      st.historicalWipDaily = {};
     }
   } catch (e) {
     console.error('loadData error:', e);
