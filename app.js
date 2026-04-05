@@ -108,6 +108,7 @@ const st = {
   scheduleEvents: [],          // from /api/schedules
   dbStdHrs: {},                // { labKey: stdHrsPerWeek } from DB
   historicalWipDaily: {},      // { 'YYYY-MM-DD': { normalizedLabKey: value } }
+  historicalWipDates: [],      // sorted dates from historicalWipDaily
   labMapping: {
     aliasToCanonicalKey: {},
     canonicalLabByKey: {},
@@ -261,9 +262,7 @@ function computeTrend(labName) {
   return 'flat';
 }
 
-// Historical peak WIP for a lab — finds the same period one year ago and returns
-// the highest daily WIP snapshot recorded in that window.
-// Weekly: same Mon–Sun last year. Monthly: same calendar month LY. Etc.
+// Historical as-of WIP for a lab — same calendar day last year, or nearest prior day with data.
 function historicalAvg(labName, viewStr) {
   const daily = typeof HARDCODED_STD_HOURS_DAILY !== 'undefined' ? HARDCODED_STD_HOURS_DAILY : {};
   const histDaily = st.historicalWipDaily;
@@ -274,46 +273,19 @@ function historicalAvg(labName, viewStr) {
   // Shift back exactly one year
   const ly = new Date(now);
   ly.setFullYear(ly.getFullYear() - 1);
-
-  let lyStart, lyEnd;
   const pad = n => String(n).padStart(2, '0');
   const toStr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-
-  if (viewStr === 'weekly') {
-    const dow = ly.getDay() || 7;
-    const mon = new Date(ly); mon.setDate(ly.getDate() - (dow - 1));
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    lyStart = toStr(mon); lyEnd = toStr(sun);
-  } else if (viewStr === 'monthly') {
-    lyStart = `${ly.getFullYear()}-${pad(ly.getMonth()+1)}-01`;
-    lyEnd = toStr(new Date(ly.getFullYear(), ly.getMonth()+1, 0));
-  } else if (viewStr === 'quarterly') {
-    // Same fiscal quarter LY
-    const fyStart = ly.getMonth() >= 3 ? ly.getFullYear() : ly.getFullYear() - 1;
-    const fiscalMo = (ly.getMonth() - 3 + 12) % 12;
-    const qIdx = Math.floor(fiscalMo / 3);
-    const qStartCal = (qIdx * 3 + 3) % 12;
-    const qStartYear = qStartCal <= 2 ? fyStart + 1 : fyStart;
-    const qEndCal = (qStartCal + 2) % 12;
-    const qEndYear = qEndCal < qStartCal ? fyStart + 1 : qStartYear;
-    lyStart = toStr(new Date(qStartYear, qStartCal, 1));
-    lyEnd   = toStr(new Date(qEndYear, qEndCal + 1, 0));
-  } else {
-    // Yearly — full prior fiscal year
-    const fyStart = ly.getMonth() >= 3 ? ly.getFullYear() : ly.getFullYear() - 1;
-    lyStart = `${fyStart}-04-01`;
-    lyEnd   = `${fyStart + 1}-03-31`;
-  }
-
-  // Find peak daily WIP in that window
-  let peak = null;
+  const targetLYDate = toStr(ly);
+  const dates = st.historicalWipDates.length ? st.historicalWipDates : Object.keys(useDaily).sort();
   const normLab = labKey(labName);
-  for (const [dateStr, labs] of Object.entries(useDaily)) {
-    if (dateStr < lyStart || dateStr > lyEnd) continue;
+  for (let i = dates.length - 1; i >= 0; i--) {
+    const dateStr = dates[i];
+    if (dateStr > targetLYDate) continue;
+    const labs = useDaily[dateStr] || {};
     const v = labs[normLab] ?? labs[labName];
-    if (v != null && (peak === null || v > peak)) peak = v;
+    if (v != null && Number.isFinite(v)) return v;
   }
-  return peak;
+  return null;
 }
 
 // ─── DATA LAYER ──────────────────────────────────────────────────────────────
@@ -449,6 +421,7 @@ async function loadData() {
     st.dbStdHrs = {};
     st.scheduleEvents = [];
     st.historicalWipDaily = {};
+    st.historicalWipDates = [];
 
     const [mappingRes, stdHrsRes, schedulesRes, settingsRes, scenariosRes, historicalWipRes] = await Promise.allSettled([
       apiFetch('/api/lab-mapping'),
@@ -521,8 +494,10 @@ async function loadData() {
 
     if (historicalWipRes.status === 'fulfilled') {
       st.historicalWipDaily = historicalWipRes.value.dailyByDate ?? {};
+      st.historicalWipDates = Object.keys(st.historicalWipDaily).sort();
     } else {
       st.historicalWipDaily = {};
+      st.historicalWipDates = [];
     }
   } catch (e) {
     console.error('loadData error:', e);
@@ -769,7 +744,7 @@ function updateTableHeaders() {
   const lbl = VIEW_LABEL[st.view] ?? '';
   const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
   set('th-demand', lbl + ' Demand');
-  set('th-hist',   'LY ' + lbl + ' Peak');
+  set('th-hist',   'LY As-Of');
   set('th-capacity', lbl + ' Capacity');
   set('th-margin', lbl + ' Margin');
   set('th-ot', lbl + ' OT Hrs');
