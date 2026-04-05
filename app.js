@@ -797,7 +797,7 @@ function updateTableHeaders() {
   set('th-hist',   'LY As-Of');
   set('th-capacity', lbl + ' Capacity');
   set('th-margin', lbl + ' Margin');
-  set('th-ot', lbl + ' OT Hrs');
+  set('th-ot', 'OT Hrs Needed');
 }
 
 function sortBy(key) {
