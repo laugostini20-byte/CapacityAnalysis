@@ -39,6 +39,21 @@ CREATE TABLE IF NOT EXISTS std_hours_overrides (
 CREATE INDEX IF NOT EXISTS idx_std_hours_lab_key ON std_hours_overrides (lab_key);
 CREATE INDEX IF NOT EXISTS idx_std_hours_effective_dates ON std_hours_overrides (effective_from, effective_to);
 
+CREATE TABLE IF NOT EXISTS headcount_overrides (
+  id BIGSERIAL PRIMARY KEY,
+  lab_raw TEXT NOT NULL,
+  lab_key TEXT NOT NULL,
+  headcount NUMERIC(10,2) NOT NULL CHECK (headcount >= 0),
+  effective_month DATE NOT NULL,
+  source_filename TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT headcount_overrides_key UNIQUE (lab_key, effective_month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_headcount_lab_key ON headcount_overrides (lab_key);
+CREATE INDEX IF NOT EXISTS idx_headcount_effective_month ON headcount_overrides (effective_month);
+
 CREATE TABLE IF NOT EXISTS scenario_profiles (
   id BIGSERIAL PRIMARY KEY,
   name TEXT NOT NULL,

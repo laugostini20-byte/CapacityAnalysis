@@ -240,6 +240,14 @@ function parseISODateInput(v) {
   return s;
 }
 
+function parseMonthInput(v) {
+  const s = String(v || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(s)) return null;
+  const [y, m] = s.split('-').map(n => parseInt(n, 10));
+  if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) return null;
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+
 function normalizeScenarioConfig(raw) {
   const src = raw && typeof raw === 'object' ? raw : {};
   const toNum = (v, fallback = 0) => {
@@ -439,6 +447,58 @@ function parseStdHoursOverrides(rows) {
   return {overrides: [...deduped.values()], issues, skipped};
 }
 
+function parseHeadcountOverrides(rows) {
+  const deduped = new Map();
+  const issues = [];
+  const skipped = [];
+
+  rows.forEach((row, idx) => {
+    const rowNumber = idx + 2;
+    const labRawVal = getRowValueByHeaders(row, [
+      'Lab',
+      'Lab / Department',
+      'Lab Name',
+      'Department',
+      'Location'
+    ]);
+    const countRaw = getRowValueByHeaders(row, [
+      'Headcount',
+      'Techs',
+      'Technicians',
+      'Tech Count',
+      'Total Techs'
+    ]);
+
+    const labRaw = String(labRawVal || '').trim();
+    const headcount = parseHoursValue(countRaw);
+    if (!labRaw || headcount == null || headcount < 0) {
+      issues.push(`Row ${rowNumber} skipped due to missing/invalid Lab or Headcount`);
+      skipped.push({rowNumber, labRaw: labRaw || null, reason: 'missing_or_invalid_required_fields'});
+      return;
+    }
+
+    const match = resolveLabMatch(labRaw);
+    const labKey = match.labKey;
+    if (!labKey) {
+      issues.push(`Row ${rowNumber} skipped due to unusable Lab value`);
+      skipped.push({rowNumber, labRaw, reason: 'unusable_lab'});
+      return;
+    }
+    if (!isLabActiveByKey(labKey)) {
+      issues.push(`Row ${rowNumber} skipped because "${labRaw}" maps to an inactive lab`);
+      skipped.push({rowNumber, labRaw, labKey, reason: 'inactive_lab'});
+      return;
+    }
+    if (match.matchType === 'unmapped') {
+      issues.push(`Row ${rowNumber}: "${labRaw}" not found in mapping file; accepted as "${labKey}"`);
+    }
+
+    deduped.set(labKey, {rowNumber, labRaw, labKey, headcount, matchType: match.matchType});
+  });
+
+  return {overrides: [...deduped.values()], issues, skipped};
+}
+
 async function ensureSchema() {
   if (!pool) return;
   await pool.query(SCHEMA_SQL);
@@ -612,6 +672,80 @@ async function syncStdHoursOverrides(client, overrides, filename, effectiveFrom,
       stdHours: Number(row.stdHours),
       effectiveFrom,
       effectiveTo
+    });
+  }
+
+  return {inserted, updated, unchanged, details};
+}
+
+function isHeadcountDifferent(a, b) {
+  return Math.abs(Number(a) - Number(b)) > 1e-9;
+}
+
+async function syncHeadcountOverrides(client, overrides, filename, effectiveMonth) {
+  let inserted = 0;
+  let updated = 0;
+  let unchanged = 0;
+  const details = {inserted: [], updated: [], unchanged: []};
+
+  for (const row of overrides) {
+    const existingRes = await client.query(
+      `SELECT id, lab_raw, headcount
+       FROM headcount_overrides
+       WHERE lab_key = $1
+         AND effective_month = $2::date
+       LIMIT 1`,
+      [row.labKey, `${effectiveMonth}-01`]
+    );
+    const existing = existingRes.rows[0];
+    if (!existing) {
+      await client.query(
+        `INSERT INTO headcount_overrides
+          (lab_raw, lab_key, headcount, effective_month, source_filename)
+         VALUES ($1, $2, $3, $4::date, $5)`,
+        [row.labRaw, row.labKey, row.headcount, `${effectiveMonth}-01`, filename]
+      );
+      inserted++;
+      details.inserted.push({
+        rowNumber: row.rowNumber,
+        labRaw: row.labRaw,
+        labKey: row.labKey,
+        matchType: row.matchType,
+        headcount: Number(row.headcount),
+        effectiveMonth
+      });
+      continue;
+    }
+
+    const changed = existing.lab_raw !== row.labRaw || isHeadcountDifferent(existing.headcount, row.headcount);
+    if (!changed) {
+      unchanged++;
+      details.unchanged.push({
+        rowNumber: row.rowNumber,
+        labRaw: row.labRaw,
+        labKey: row.labKey,
+        matchType: row.matchType,
+        headcount: Number(row.headcount),
+        effectiveMonth
+      });
+      continue;
+    }
+
+    await client.query(
+      `UPDATE headcount_overrides
+       SET lab_raw = $1, headcount = $2, source_filename = $3, updated_at = NOW()
+       WHERE id = $4`,
+      [row.labRaw, row.headcount, filename, existing.id]
+    );
+    updated++;
+    details.updated.push({
+      rowNumber: row.rowNumber,
+      labRaw: row.labRaw,
+      labKey: row.labKey,
+      matchType: row.matchType,
+      previousHeadcount: Number(existing.headcount),
+      headcount: Number(row.headcount),
+      effectiveMonth
     });
   }
 
@@ -848,6 +982,88 @@ app.post('/api/std-hours/sync', upload.single('file'), async (req, res) => {
       validRows: overrides.length,
       effectiveFrom,
       effectiveTo,
+      skippedRows: skipped.length,
+      skipped: skipped.slice(0, 100),
+      issues: issues.slice(0, 50)
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({error: err.message});
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/headcount', async (_req, res) => {
+  if (!dbRequired(res)) return;
+  try {
+    const result = await pool.query(
+      `SELECT id, lab_raw, lab_key, headcount, to_char(effective_month, 'YYYY-MM') AS effective_month,
+              created_at, updated_at
+       FROM headcount_overrides
+       ORDER BY effective_month DESC, updated_at DESC, id DESC`
+    );
+    const overrides = result.rows.map(r => ({
+      id: Number(r.id),
+      lab: r.lab_raw,
+      labKey: r.lab_key,
+      headcount: Number(r.headcount),
+      effectiveMonth: r.effective_month,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+    res.json({overrides});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+app.post('/api/headcount/sync', upload.single('file'), async (req, res) => {
+  if (!dbRequired(res)) return;
+  if (!req.file) {
+    res.status(400).json({error: 'Missing upload file. Field name must be "file".'});
+    return;
+  }
+
+  const effectiveMonth = parseMonthInput(req.body.effectiveMonth);
+  if (!effectiveMonth) {
+    res.status(400).json({error: 'Effective month is required in YYYY-MM format.'});
+    return;
+  }
+
+  let rows;
+  try {
+    rows = parseRowsFromBuffer(req.file);
+  } catch (err) {
+    res.status(400).json({error: `Could not parse file: ${err.message}`});
+    return;
+  }
+
+  const {overrides, issues, skipped} = parseHeadcountOverrides(rows);
+  if (!overrides.length) {
+    res.status(400).json({
+      error: 'No valid headcount rows found. Expected columns like Lab and Headcount.',
+      issues: issues.slice(0, 50),
+      skipped: skipped.slice(0, 100)
+    });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const summary = await syncHeadcountOverrides(
+      client,
+      overrides,
+      req.file.originalname || 'upload',
+      effectiveMonth
+    );
+    await client.query('COMMIT');
+    res.json({
+      summary,
+      parsedRows: rows.length,
+      validRows: overrides.length,
+      effectiveMonth,
       skippedRows: skipped.length,
       skipped: skipped.slice(0, 100),
       issues: issues.slice(0, 50)

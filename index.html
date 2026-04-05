@@ -65,13 +65,14 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 #status-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #d0dce8;background:#fff;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
 #status-table{width:100%;border-collapse:collapse;font-size:12px}
 #status-table thead th{padding:9px 12px;text-align:center;font-size:10px;font-weight:700;color:#dbe6f3;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #0f2f4f;white-space:nowrap;background:#002342;cursor:pointer;user-select:none}
+#status-table thead th:first-child{text-align:left}
 #status-table thead th.has-help{position:relative}
 #status-table tbody tr{border-bottom:1px solid #f4f4f5;cursor:pointer;transition:background .1s}
 #status-table tbody tr:last-child{border-bottom:none}
 #status-table tbody tr:hover td{background:#e8f1f8}
 #status-table tbody td{padding:9px 12px;vertical-align:middle;text-align:center}
 .td-num{text-align:center;color:#52525b;font-variant-numeric:tabular-nums}
-.td-lab{font-weight:600;color:#18181b;text-align:center}
+.td-lab{font-weight:600;color:#18181b;text-align:left}
 
 /* BADGES */
 .badge{display:inline-flex;align-items:center;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
@@ -498,6 +499,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
       <div class="upload-tabs">
         <button class="upload-tab active" id="utab-std-hours" onclick="switchUploadTab('std-hours')">Std Hours</button>
         <button class="upload-tab" id="utab-schedule" onclick="switchUploadTab('schedule')">Onsite Schedule</button>
+        <button class="upload-tab" id="utab-headcount" onclick="switchUploadTab('headcount')">Headcount</button>
       </div>
 
       <div id="upload-pane-std-hours">
@@ -523,6 +525,21 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
           </div>
           <button type="submit" class="upload-submit">Upload schedule</button>
           <div id="upload-result-schedule" class="upload-result"></div>
+        </form>
+      </div>
+
+      <div id="upload-pane-headcount" hidden>
+        <form class="upload-form" onsubmit="submitUpload(event,'headcount')">
+          <div class="upload-field">
+            <label>File (CSV or Excel)</label>
+            <input type="file" name="file" accept=".csv,.xlsx,.xls" required>
+          </div>
+          <div class="upload-field">
+            <label>Effective month</label>
+            <input type="month" name="effectiveMonth" required>
+          </div>
+          <button type="submit" class="upload-submit">Upload headcount</button>
+          <div id="upload-result-headcount" class="upload-result"></div>
         </form>
       </div>
     </div>

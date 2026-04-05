@@ -107,6 +107,7 @@ const st = {
   labSettings: {},             // { labKey: { productivityPct, daysPerWeek, systemType } }
   scheduleEvents: [],          // from /api/schedules
   dbStdHrs: {},                // { labKey: stdHrsPerWeek } from DB
+  dbHeadcountByMonth: {},      // { 'YYYY-MM': { labKey: headcount } } from DB
   historicalWipDaily: {},      // { 'YYYY-MM-DD': { normalizedLabKey: value } }
   historicalWipDates: [],      // sorted dates from historicalWipDaily
   labMapping: {
@@ -354,6 +355,9 @@ function monthKeyFromDate(d) {
 }
 
 function getHeadcountForDate(labName, refDate) {
+  const dbVal = getDbHeadcountForDate(labName, refDate);
+  if (dbVal != null) return dbVal;
+
   const hc = typeof HARDCODED_MONTHLY_HEADCOUNT !== 'undefined' ? HARDCODED_MONTHLY_HEADCOUNT : {};
   const keys = Object.keys(hc).sort();
   if (!keys.length) return null;
@@ -369,6 +373,23 @@ function getHeadcountForDate(labName, refDate) {
   for (let i = 0; i < keys.length; i++) {
     if (keys[i] < target) continue;
     const v = hc[keys[i]]?.[labName];
+    if (v != null) return v;
+  }
+  return null;
+}
+
+function getDbHeadcountForDate(labName, refDate) {
+  const byMonth = st.dbHeadcountByMonth || {};
+  const months = Object.keys(byMonth).sort();
+  if (!months.length) return null;
+  const target = monthKeyFromDate(refDate);
+  const key = mapToCanonicalLabKey(labName);
+
+  // Use latest uploaded headcount at or before target month.
+  for (let i = months.length - 1; i >= 0; i--) {
+    const m = months[i];
+    if (m > target) continue;
+    const v = byMonth[m]?.[key];
     if (v != null) return v;
   }
   return null;
@@ -495,17 +516,19 @@ async function apiFetch(url, opts = {}) {
 async function loadData() {
   try {
     st.dbStdHrs = {};
+    st.dbHeadcountByMonth = {};
     st.scheduleEvents = [];
     st.historicalWipDaily = {};
     st.historicalWipDates = [];
 
-    const [mappingRes, stdHrsRes, schedulesRes, settingsRes, scenariosRes, historicalWipRes] = await Promise.allSettled([
+    const [mappingRes, stdHrsRes, schedulesRes, settingsRes, scenariosRes, historicalWipRes, headcountRes] = await Promise.allSettled([
       apiFetch('/api/lab-mapping'),
       apiFetch('/api/std-hours/current'),
       apiFetch('/api/schedules'),
       apiFetch('/api/lab-settings'),
       apiFetch('/api/scenarios'),
       apiFetch('/api/historical-wip'),
+      apiFetch('/api/headcount'),
     ]);
 
     if (mappingRes.status === 'fulfilled') {
@@ -574,6 +597,23 @@ async function loadData() {
     } else {
       st.historicalWipDaily = {};
       st.historicalWipDates = [];
+    }
+
+    if (headcountRes.status === 'fulfilled') {
+      const overrides = headcountRes.value.overrides ?? [];
+      const byMonth = {};
+      overrides.forEach((r) => {
+        const month = String(r.effectiveMonth || '').slice(0, 7);
+        if (!month) return;
+        const key = mapToCanonicalLabKey(r.labKey || r.lab || '');
+        const n = Number(r.headcount);
+        if (!key || !Number.isFinite(n)) return;
+        if (!byMonth[month]) byMonth[month] = {};
+        byMonth[month][key] = n;
+      });
+      st.dbHeadcountByMonth = byMonth;
+    } else {
+      st.dbHeadcountByMonth = {};
     }
   } catch (e) {
     console.error('loadData error:', e);
@@ -1437,7 +1477,7 @@ function onUploadBackdropClick(e) {
 }
 
 function switchUploadTab(tabName) {
-  ['std-hours', 'schedule'].forEach(t => {
+  ['std-hours', 'schedule', 'headcount'].forEach(t => {
     document.getElementById(`utab-${t}`)?.classList.toggle('active', t === tabName);
     const pane = document.getElementById(`upload-pane-${t}`);
     if (pane) pane.hidden = t !== tabName;
@@ -1467,6 +1507,13 @@ function formatStdHoursItem(item) {
   return `${item.labRaw} (${range}): ${item.stdHours} std hrs`;
 }
 
+function formatHeadcountItem(item) {
+  if (item.previousHeadcount != null) {
+    return `${item.labRaw}: ${item.previousHeadcount} -> ${item.headcount} techs`;
+  }
+  return `${item.labRaw}: ${item.headcount} techs`;
+}
+
 function formatSkippedReason(reason) {
   if (reason === 'missing_or_invalid_required_fields') return 'missing or invalid required fields';
   if (reason === 'unusable_lab') return 'lab value could not be interpreted';
@@ -1490,9 +1537,15 @@ function renderUploadReport(type, data) {
   if (type === 'std-hours') {
     const range = data.effectiveTo ? `${data.effectiveFrom} to ${data.effectiveTo}` : `${data.effectiveFrom} onward`;
     lines.push(`Effective range: ${range}`);
+  } else if (type === 'headcount') {
+    lines.push(`Effective month: ${data.effectiveMonth ?? '—'}`);
   }
 
-  const fmtItem = type === 'std-hours' ? formatStdHoursItem : formatScheduleItem;
+  const fmtItem = type === 'std-hours'
+    ? formatStdHoursItem
+    : type === 'headcount'
+      ? formatHeadcountItem
+      : formatScheduleItem;
 
   if (inserted.length) {
     lines.push('');
@@ -1543,7 +1596,11 @@ async function submitUpload(e, type) {
   resultEl.textContent = 'Uploading…';
 
   const fd = new FormData(form);
-  const url = type === 'std-hours' ? '/api/std-hours/sync' : '/api/schedules/sync';
+  const url = type === 'std-hours'
+    ? '/api/std-hours/sync'
+    : type === 'headcount'
+      ? '/api/headcount/sync'
+      : '/api/schedules/sync';
   try {
     const res = await fetch(url, { method: 'POST', body: fd });
     const data = await res.json();
