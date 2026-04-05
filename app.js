@@ -107,6 +107,7 @@ const st = {
   labSettings: {},             // { labKey: { productivityPct, daysPerWeek, systemType } }
   scheduleEvents: [],          // from /api/schedules
   dbStdHrs: {},                // { labKey: stdHrsPerWeek } from DB
+  dbStdHrsTimelineByLab: {},   // { labKey: [{effectiveFrom,effectiveTo,stdHours,updatedAt}] }
   dbHeadcountByMonth: {},      // { 'YYYY-MM': { labKey: headcount } } from DB
   historicalWipDaily: {},      // { 'YYYY-MM-DD': { normalizedLabKey: value } }
   historicalWipDates: [],      // sorted dates from historicalWipDaily
@@ -537,14 +538,16 @@ async function apiFetch(url, opts = {}) {
 async function loadData() {
   try {
     st.dbStdHrs = {};
+    st.dbStdHrsTimelineByLab = {};
     st.dbHeadcountByMonth = {};
     st.scheduleEvents = [];
     st.historicalWipDaily = {};
     st.historicalWipDates = [];
 
-    const [mappingRes, stdHrsRes, schedulesRes, settingsRes, scenariosRes, historicalWipRes, headcountRes] = await Promise.allSettled([
+    const [mappingRes, stdHrsCurrentRes, stdHrsAllRes, schedulesRes, settingsRes, scenariosRes, historicalWipRes, headcountRes] = await Promise.allSettled([
       apiFetch('/api/lab-mapping'),
       apiFetch('/api/std-hours/current'),
+      apiFetch('/api/std-hours'),
       apiFetch('/api/schedules'),
       apiFetch('/api/lab-settings'),
       apiFetch('/api/scenarios'),
@@ -571,8 +574,8 @@ async function loadData() {
       };
     }
 
-    if (stdHrsRes.status === 'fulfilled') {
-      const { labs, dataDate } = stdHrsRes.value;
+    if (stdHrsCurrentRes.status === 'fulfilled') {
+      const { labs, dataDate } = stdHrsCurrentRes.value;
       st.dataDate = dataDate;
       labs.forEach(l => {
         const key = mapToCanonicalLabKey(l.labKey || l.labRaw);
@@ -583,6 +586,34 @@ async function loadData() {
         document.getElementById('data-date-label').textContent =
           'Week of ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       }
+    }
+
+    if (stdHrsAllRes.status === 'fulfilled') {
+      const overrides = stdHrsAllRes.value.overrides ?? [];
+      const timeline = {};
+      overrides.forEach((r) => {
+        const key = mapToCanonicalLabKey(r.labKey || r.lab || '');
+        const from = String(r.effectiveFrom || '').slice(0, 10);
+        const to = r.effectiveTo ? String(r.effectiveTo).slice(0, 10) : null;
+        const stdHours = Number(r.stdHours);
+        if (!key || !from || !Number.isFinite(stdHours) || !isLabActive(key)) return;
+        if (!timeline[key]) timeline[key] = [];
+        timeline[key].push({
+          effectiveFrom: from,
+          effectiveTo: to,
+          stdHours,
+          updatedAt: r.updatedAt ? String(r.updatedAt) : ''
+        });
+      });
+      Object.values(timeline).forEach((rows) => {
+        rows.sort((a, b) => {
+          if (a.effectiveFrom === b.effectiveFrom) return a.updatedAt > b.updatedAt ? -1 : 1;
+          return a.effectiveFrom > b.effectiveFrom ? -1 : 1;
+        });
+      });
+      st.dbStdHrsTimelineByLab = timeline;
+    } else {
+      st.dbStdHrsTimelineByLab = {};
     }
 
     if (schedulesRes.status === 'fulfilled') {
@@ -1055,19 +1086,63 @@ function monthLabelFromKey(monthKey) {
   return `${new Date(y, m - 1, 1).toLocaleString('en-US', {month: 'short'})} ${y}`;
 }
 
-function getMonthlyDemandForLab(lab, monthKey) {
-  const wipData = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined' ? HARDCODED_STD_HOURS_BY_MONTH : {};
-  const monthData = wipData[monthKey];
-  if (!monthData) return null;
-  const targetKey = mapToCanonicalLabKey(lab.labKey || lab.labName);
-  const direct = monthData[lab.labName];
-  if (Number.isFinite(Number(direct))) return Number(direct);
-  for (const [name, rawVal] of Object.entries(monthData)) {
-    const v = Number(rawVal);
-    if (!Number.isFinite(v)) continue;
-    if (mapToCanonicalLabKey(name) === targetKey) return v;
+function toISODate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function monthRangeFromKey(monthKey) {
+  const [year, month] = monthKey.split('-').map(n => parseInt(n, 10));
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
+  return {
+    refDate: start,
+    startDate: toISODate(start),
+    endDate: toISODate(end),
+  };
+}
+
+function getStdHoursForDate(lab, refDate) {
+  const target = toISODate(refDate);
+  const key = mapToCanonicalLabKey(lab.labKey || lab.labName);
+  const rows = st.dbStdHrsTimelineByLab[key] || [];
+
+  for (const r of rows) {
+    if (r.effectiveFrom <= target && (!r.effectiveTo || r.effectiveTo >= target)) {
+      if (Number.isFinite(r.stdHours)) return Number(r.stdHours);
+    }
   }
-  return null;
+  for (const r of rows) {
+    if (r.effectiveFrom <= target && Number.isFinite(r.stdHours)) return Number(r.stdHours);
+  }
+
+  let nearestAfter = null;
+  for (const r of rows) {
+    if (r.effectiveFrom > target && Number.isFinite(r.stdHours)) {
+      if (!nearestAfter || r.effectiveFrom < nearestAfter.effectiveFrom) nearestAfter = r;
+    }
+  }
+  if (nearestAfter) return Number(nearestAfter.stdHours);
+
+  const current = st.dbStdHrs[key]?.stdHrsPerWeek;
+  if (Number.isFinite(Number(current))) return Number(current);
+  if (Number.isFinite(Number(lab.stdHrsPerWeek))) return Number(lab.stdHrsPerWeek);
+  return 0;
+}
+
+function onsiteTechDaysForRange(labName, startDate, endDate) {
+  if (!st.scheduleEvents.length) return 0;
+  const key = mapToCanonicalLabKey(labName);
+  let techDaysAway = 0;
+  for (const e of st.scheduleEvents) {
+    if (e.labKey !== key || e.techCount <= 0) continue;
+    const overlapStart = e.startDate > startDate ? e.startDate : startDate;
+    const overlapEnd = e.endDate < endDate ? e.endDate : endDate;
+    if (overlapStart > overlapEnd) continue;
+    const days = (new Date(`${overlapEnd}T00:00:00`) - new Date(`${overlapStart}T00:00:00`)) / 86400000 + 1;
+    techDaysAway += days * e.techCount;
+  }
+  return techDaysAway;
 }
 
 function getMetricValue(snapshot, metric) {
@@ -1101,14 +1176,17 @@ function latestMetricIndex(values) {
 }
 
 function buildMonthlySnapshot(lab, monthKey) {
-  const [year, month] = monthKey.split('-').map(n => parseInt(n, 10));
-  const refDate = new Date(year, month - 1, 1);
-  const demand = getMonthlyDemandForLab(lab, monthKey);
-  const techs = getHeadcountForDate(lab.labName, refDate) ?? lab.totalTechs;
-  const capacity = techs * (SHIFT_HRS * lab.productivityPct / 100) * lab.daysPerWeek * WEEKS_PER_MONTH;
-  const load = demand != null && capacity > 0 ? (demand / capacity) * 100 : null;
+  const range = monthRangeFromKey(monthKey);
+  if (!range) return {monthKey, demand: null, capacity: null, load: null, ot: null, techs: null, onsite: null, avail: null};
+  const demand = getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH;
+  const techs = getHeadcountForDate(lab.labName, range.refDate) ?? lab.totalTechs;
+  const workDays = Math.round(5 * WEEKS_PER_MONTH);
+  const onsite = workDays > 0 ? onsiteTechDaysForRange(lab.labName, range.startDate, range.endDate) / workDays : 0;
+  const avail = Math.max(0, techs - onsite);
+  const capacity = avail * (SHIFT_HRS * lab.productivityPct / 100) * lab.daysPerWeek * WEEKS_PER_MONTH;
+  const load = capacity > 0 ? (demand / capacity) * 100 : (demand > 0 ? Infinity : 0);
   const ot = demand != null ? Math.max(0, demand - capacity) : null;
-  return {monthKey, demand, capacity, load, ot, techs};
+  return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
 }
 
 function buildFYMonthlySnapshots(lab, fyStartYear) {
@@ -1116,16 +1194,6 @@ function buildFYMonthlySnapshots(lab, fyStartYear) {
 }
 
 function getLatestFYWithData(lab) {
-  const wipData = typeof HARDCODED_STD_HOURS_BY_MONTH !== 'undefined' ? HARDCODED_STD_HOURS_BY_MONTH : {};
-  const monthKeys = Object.keys(wipData).sort();
-  const targetKey = mapToCanonicalLabKey(lab.labKey || lab.labName);
-  for (let i = monthKeys.length - 1; i >= 0; i--) {
-    const monthData = wipData[monthKeys[i]] || {};
-    for (const [name, rawVal] of Object.entries(monthData)) {
-      if (!Number.isFinite(Number(rawVal))) continue;
-      if (mapToCanonicalLabKey(name) === targetKey) return fyStartFromMonthKey(monthKeys[i]);
-    }
-  }
   return currentFYStartYear();
 }
 
@@ -1165,8 +1233,9 @@ function buildLabChart(lab) {
 
   const thisSnapshots = buildFYMonthlySnapshots(lab, fyStart);
   const prevSnapshots = buildFYMonthlySnapshots(lab, prevFYStart);
-  const thisValues = thisSnapshots.map(s => getMetricValue(s, metric));
-  const prevValues = prevSnapshots.map(s => getMetricValue(s, metric));
+  const sanitize = v => (v != null && Number.isFinite(v) ? v : null);
+  const thisValues = thisSnapshots.map(s => sanitize(getMetricValue(s, metric)));
+  const prevValues = prevSnapshots.map(s => sanitize(getMetricValue(s, metric)));
   const hasThis = thisValues.some(v => v != null && Number.isFinite(v));
   const hasPrev = prevValues.some(v => v != null && Number.isFinite(v));
 
