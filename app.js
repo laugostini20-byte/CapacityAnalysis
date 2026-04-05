@@ -728,9 +728,10 @@ function renderSummaryCards() {
   set('card-over',  counts.over);
   set('card-risk',  counts.risk);
   set('card-ok',    counts.ok);
-  set('card-onsite', fmtInt(totalOnsiteTechDays));
+  const totalOnsiteFTE = totalOnsiteTechDays / 5;
+  set('card-onsite', fmt(totalOnsiteFTE, 1));
   const onsiteSub = document.getElementById('card-onsite-sub');
-  if (onsiteSub) onsiteSub.textContent = `tech-days away · ${st.view}`;
+  if (onsiteSub) onsiteSub.textContent = `${fmtInt(totalOnsiteTechDays)} tech-days away · ${st.view}`;
 }
 
 function setSegActive(groupId, val, labelMap) {
