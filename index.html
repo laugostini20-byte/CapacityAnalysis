@@ -35,7 +35,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .seg-btn{background:none;border:none;border-right:1px solid #d0dce8;color:#4d4d4d;font-size:12px;font-weight:600;padding:6px 11px;cursor:pointer;white-space:nowrap;transition:background .1s,color .1s}
 .seg-btn:last-child{border-right:none}
 .seg-btn.active{background:#00539b;color:#fff}
-.lab-picker{position:relative;margin-left:auto;min-width:230px;max-width:320px;flex:1}
+.lab-picker{position:relative;margin-left:auto;min-width:260px;max-width:360px;flex:0 0 auto}
 .lab-picker-btn{width:100%;border:1px solid #d0dce8;border-radius:8px;background:#fff;color:#1a1a2e;padding:6px 10px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;transition:border-color .12s}
 .lab-picker.open .lab-picker-btn,.lab-picker-btn:hover{border-color:#00539b}
 .lab-picker-caret{color:#6b7a90;font-size:11px;line-height:1}
@@ -51,8 +51,6 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .lab-picker-option:hover{background:#e8f1f8}
 .lab-picker-option input{margin:0}
 .lab-picker-empty{padding:10px;font-size:12px;color:#6b7a90;border-top:1px solid #d0dce8}
-#table-header-lab-picker{position:absolute;left:10px;top:8px;z-index:220;width:300px;max-width:42%}
-#table-header-lab-picker .lab-picker{margin-left:0;max-width:none;min-width:0}
 
 /* ASSUMPTIONS */
 #assumptions-panel{background:#fff;border:1px solid #d0dce8;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#4d4d4d;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
@@ -64,7 +62,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .assumption-note{color:#f59e0b;font-weight:500;margin-top:4px}
 
 /* STATUS TABLE */
-#status-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #d0dce8;background:#fff;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05);position:relative}
+#status-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #d0dce8;background:#fff;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
 #status-table{width:100%;border-collapse:collapse;font-size:12px}
 #status-table thead th{padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#dbe6f3;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #0f2f4f;white-space:nowrap;background:#002342;cursor:pointer;user-select:none}
 #status-table thead th:first-child,#status-table thead th:nth-child(2),#status-table thead th:nth-child(3){text-align:left}
@@ -315,6 +313,16 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
         <button class="seg-btn" onclick="setView('yearly')">Yearly</button>
       </div>
     </div>
+    <div class="filter-group" style="margin-left:auto">
+      <span class="filter-label">Labs</span>
+      <div class="lab-picker" id="lab-picker">
+        <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
+          <span id="lab-picker-summary">All labs</span>
+          <span class="lab-picker-caret">▾</span>
+        </button>
+        <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
+      </div>
+    </div>
   </div>
 
   <details id="assumptions-panel">
@@ -329,15 +337,6 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
   </details>
 
   <div id="status-table-wrap">
-    <div id="table-header-lab-picker">
-      <div class="lab-picker" id="lab-picker">
-        <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
-          <span id="lab-picker-summary">All labs</span>
-          <span class="lab-picker-caret">▾</span>
-        </button>
-        <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
-      </div>
-    </div>
     <table id="status-table">
       <thead>
         <tr>
