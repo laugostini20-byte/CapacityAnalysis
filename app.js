@@ -134,6 +134,7 @@ const st = {
 
 let labPickerInitialized = false;
 let labPickerSearchTerm = '';
+let headerHelpTipEl = null;
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 function labKey(name) {
@@ -142,6 +143,55 @@ function labKey(name) {
 
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function ensureHeaderHelpTip() {
+  if (headerHelpTipEl) return headerHelpTipEl;
+  const el = document.createElement('div');
+  el.className = 'header-help-tip';
+  document.body.appendChild(el);
+  headerHelpTipEl = el;
+  return el;
+}
+
+function hideHeaderHelpTip() {
+  if (!headerHelpTipEl) return;
+  headerHelpTipEl.classList.remove('show');
+}
+
+function showHeaderHelpTip(text, x, y) {
+  if (!text) return hideHeaderHelpTip();
+  const tip = ensureHeaderHelpTip();
+  tip.textContent = text;
+  tip.classList.add('show');
+  const pad = 12;
+  const rect = tip.getBoundingClientRect();
+  let left = x + 14;
+  let top = y + 14;
+  if (left + rect.width > window.innerWidth - pad) left = x - rect.width - 14;
+  if (top + rect.height > window.innerHeight - pad) top = y - rect.height - 14;
+  tip.style.left = `${Math.max(pad, left)}px`;
+  tip.style.top = `${Math.max(pad, top)}px`;
+}
+
+function initHeaderTooltips() {
+  const table = document.getElementById('status-table');
+  if (!table) return;
+  table.querySelectorAll('thead th').forEach(th => {
+    const text = th.getAttribute('data-help') || th.getAttribute('title') || '';
+    if (!text) return;
+    th.dataset.help = text;
+    th.classList.add('has-help');
+    th.removeAttribute('title');
+  });
+
+  table.addEventListener('mousemove', (e) => {
+    const th = e.target.closest('thead th.has-help');
+    if (!th) return hideHeaderHelpTip();
+    showHeaderHelpTip(th.dataset.help || '', e.clientX, e.clientY);
+  });
+  table.addEventListener('mouseleave', hideHeaderHelpTip);
+  window.addEventListener('scroll', hideHeaderHelpTip, {passive: true});
 }
 
 function fmt(n, dec = 1) {
@@ -1513,6 +1563,7 @@ async function submitUpload(e, type) {
 async function init() {
   updateTableHeaders();
   updateWeekLabel();
+  initHeaderTooltips();
   document.addEventListener('click', handleDocumentClickForLabPicker);
   await loadData();
   renderStatusBoard();

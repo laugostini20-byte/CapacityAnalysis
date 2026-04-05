@@ -65,6 +65,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 #status-table{width:100%;border-collapse:collapse;font-size:12px}
 #status-table thead th{padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#dbe6f3;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #0f2f4f;white-space:nowrap;background:#002342;cursor:pointer;user-select:none}
 #status-table thead th:first-child,#status-table thead th:nth-child(2),#status-table thead th:nth-child(3){text-align:left}
+#status-table thead th.has-help{position:relative}
 #status-table tbody tr{border-bottom:1px solid #f4f4f5;cursor:pointer;transition:background .1s}
 #status-table tbody tr:last-child{border-bottom:none}
 #status-table tbody tr:hover td{background:#e8f1f8}
@@ -222,6 +223,8 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .empty-row td{text-align:center;padding:40px;color:#a1a1aa;font-size:13px}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-thumb{background:#d4d4d8;border-radius:3px}
+.header-help-tip{position:fixed;z-index:1000;max-width:320px;padding:8px 10px;border-radius:8px;background:#0f172a;color:#e2e8f0;font-size:12px;line-height:1.35;box-shadow:0 10px 25px rgba(2,6,23,.35);pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .08s ease,transform .08s ease}
+.header-help-tip.show{opacity:1;transform:translateY(0)}
 </style>
 </head>
 <body>
