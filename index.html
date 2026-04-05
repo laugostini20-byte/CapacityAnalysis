@@ -9,9 +9,10 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2e;min-height:100vh}
+:root{--page-max:1280px;--page-gutter:24px}
 
 /* NAV */
-#app-nav{display:flex;align-items:center;gap:0;background:#002342;height:56px;padding:0 24px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+#app-nav{display:flex;align-items:center;gap:0;background:#002342;height:56px;padding:0 max(var(--page-gutter),calc((100vw - var(--page-max))/2 + var(--page-gutter)));position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .nav-brand{color:#fff;font-weight:700;font-size:15px;letter-spacing:.02em;margin-right:24px;white-space:nowrap}
 .nav-tabs{display:flex;gap:2px;flex:1}
 .nav-tab{background:none;border:none;color:#9cb0c9;font-size:13px;font-weight:700;padding:7px 14px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s;white-space:nowrap}
@@ -23,7 +24,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .nav-btn:hover{background:#f2bf43}
 
 /* VIEWS */
-.view-panel{display:none;padding:20px 24px;max-width:1280px;margin:0 auto}
+.view-panel{display:none;padding:20px var(--page-gutter);max-width:var(--page-max);margin:0 auto}
 .view-panel.active{display:block}
 
 /* FILTER BAR */
