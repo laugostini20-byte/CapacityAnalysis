@@ -85,9 +85,9 @@ const BASE_LABS = [
   {lab:'Pipettes San Diego Lab',      techs:3,  stdHrs:null},
 ];
 
-// FY month keys in order (Apr–Mar)
-const FY_MONTH_SUFFIXES = ['04','05','06','07','08','09','10','11','12','01','02','03'];
-const FY_MONTH_LABELS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+// Calendar-month labels for modal charts
+const CAL_MONTH_SUFFIXES = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+const CAL_MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 // Current fiscal year start (e.g. 2025 for FY 2025-26)
 function currentFYStartYear() {
@@ -1064,20 +1064,12 @@ function onModalBackdropClick(e) {
   if (e.target === document.getElementById('lab-modal')) closeModal();
 }
 
-function monthKeyForFYIndex(fyStartYear, monthIndex) {
-  const mo = FY_MONTH_SUFFIXES[monthIndex];
-  const yr = mo <= '03' ? fyStartYear + 1 : fyStartYear;
-  return `${yr}-${mo}`;
+function monthKeyForYearIndex(year, monthIndex) {
+  return `${year}-${CAL_MONTH_SUFFIXES[monthIndex]}`;
 }
 
-function fyStartFromMonthKey(monthKey) {
-  const [y, m] = String(monthKey || '').split('-').map(n => parseInt(n, 10));
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return currentFYStartYear();
-  return m >= 4 ? y : y - 1;
-}
-
-function fyLabel(fyStartYear) {
-  return `FY${String(fyStartYear + 1).slice(-2)}`;
+function yearLabel(year) {
+  return String(year);
 }
 
 function monthLabelFromKey(monthKey) {
@@ -1086,9 +1078,8 @@ function monthLabelFromKey(monthKey) {
   return `${new Date(y, m - 1, 1).toLocaleString('en-US', {month: 'short'})} ${y}`;
 }
 
-function fiscalMonthIndexFromDate(d) {
-  const month = d.getMonth();
-  return month >= 3 ? month - 3 : month + 9;
+function calendarMonthIndexFromDate(d) {
+  return d.getMonth();
 }
 
 function toISODate(d) {
@@ -1105,6 +1096,10 @@ function monthRangeFromKey(monthKey) {
     startDate: toISODate(start),
     endDate: toISODate(end),
   };
+}
+
+function buildEmptyMonthlySnapshot(monthKey) {
+  return {monthKey, demand: null, capacity: null, load: null, ot: null, techs: null, onsite: null, avail: null};
 }
 
 function getStdHoursForDate(lab, refDate) {
@@ -1133,6 +1128,15 @@ function getStdHoursForDate(lab, refDate) {
   if (Number.isFinite(Number(current))) return Number(current);
   if (Number.isFinite(Number(lab.stdHrsPerWeek))) return Number(lab.stdHrsPerWeek);
   return 0;
+}
+
+function getChartHeadcountForDate(labName, refDate) {
+  const y = refDate.getFullYear();
+  const m = refDate.getMonth() + 1;
+  if (y === 2025 && m < 3) {
+    return getHeadcountForDate(labName, new Date(2025, 2, 1));
+  }
+  return getHeadcountForDate(labName, refDate);
 }
 
 function onsiteTechDaysForRange(labName, startDate, endDate) {
@@ -1182,9 +1186,9 @@ function latestMetricIndex(values) {
 
 function buildMonthlySnapshot(lab, monthKey) {
   const range = monthRangeFromKey(monthKey);
-  if (!range) return {monthKey, demand: null, capacity: null, load: null, ot: null, techs: null, onsite: null, avail: null};
+  if (!range) return buildEmptyMonthlySnapshot(monthKey);
   const demand = getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH;
-  const techs = getHeadcountForDate(lab.labName, range.refDate) ?? lab.totalTechs;
+  const techs = getChartHeadcountForDate(lab.labName, range.refDate) ?? lab.totalTechs;
   const workDays = Math.round(5 * WEEKS_PER_MONTH);
   const onsite = workDays > 0 ? onsiteTechDaysForRange(lab.labName, range.startDate, range.endDate) / workDays : 0;
   const avail = Math.max(0, techs - onsite);
@@ -1194,12 +1198,12 @@ function buildMonthlySnapshot(lab, monthKey) {
   return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
 }
 
-function buildFYMonthlySnapshots(lab, fyStartYear) {
-  return FY_MONTH_SUFFIXES.map((_, idx) => buildMonthlySnapshot(lab, monthKeyForFYIndex(fyStartYear, idx)));
-}
-
-function getLatestFYWithData(lab) {
-  return currentFYStartYear();
+function buildYearMonthlySnapshots(lab, year, truncateAfterIndex = null) {
+  return CAL_MONTH_SUFFIXES.map((_, idx) => {
+    const monthKey = monthKeyForYearIndex(year, idx);
+    if (truncateAfterIndex != null && idx > truncateAfterIndex) return buildEmptyMonthlySnapshot(monthKey);
+    return buildMonthlySnapshot(lab, monthKey);
+  });
 }
 
 function syncModalToolbarState() {
@@ -1233,22 +1237,22 @@ function renderModalDetail() {
 
 function buildLabChart(lab) {
   const metric = st.modalMetric;
-  const compareFYStart = currentFYStartYear();
-  const primaryFYStart = compareFYStart - 1;
+  const currentYear = referenceDate().getFullYear();
+  const baselineYear = currentYear - 1;
+  const currentMonthIdx = calendarMonthIndexFromDate(referenceDate());
 
-  const thisSnapshots = buildFYMonthlySnapshots(lab, primaryFYStart);
-  const prevSnapshots = buildFYMonthlySnapshots(lab, compareFYStart);
+  const thisSnapshots = buildYearMonthlySnapshots(lab, baselineYear);
+  const prevSnapshots = buildYearMonthlySnapshots(lab, currentYear, currentMonthIdx);
   const sanitize = v => (v != null && Number.isFinite(v) ? v : null);
   const thisValues = thisSnapshots.map(s => sanitize(getMetricValue(s, metric)));
   const prevValues = prevSnapshots.map(s => sanitize(getMetricValue(s, metric)));
   const hasThis = thisValues.some(v => v != null && Number.isFinite(v));
   const hasPrev = prevValues.some(v => v != null && Number.isFinite(v));
 
-  if (st.modalMonthIndex == null || !Number.isFinite(thisValues[st.modalMonthIndex])) {
-    const currentIdx = fiscalMonthIndexFromDate(referenceDate());
-    st.modalMonthIndex = prevValues[currentIdx] != null
-      ? currentIdx
-      : latestMetricIndex(prevValues) ?? latestMetricIndex(thisValues) ?? currentIdx;
+  if (st.modalMonthIndex == null || (!Number.isFinite(prevValues[st.modalMonthIndex]) && !Number.isFinite(thisValues[st.modalMonthIndex]))) {
+    st.modalMonthIndex = prevValues[currentMonthIdx] != null
+      ? currentMonthIdx
+      : latestMetricIndex(prevValues) ?? latestMetricIndex(thisValues) ?? currentMonthIdx;
   }
 
   const thisColor = metric === 'load' ? '#2563eb' : metric === 'demand' ? '#4f46e5' : metric === 'capacity' ? '#0f766e' : '#dc2626';
@@ -1257,7 +1261,7 @@ function buildLabChart(lab) {
   const datasets = [];
   if (hasThis) {
     datasets.push({
-      label: fyLabel(primaryFYStart),
+      label: yearLabel(baselineYear),
       fyType: 'this',
       data: thisValues,
       borderColor: thisColor,
@@ -1275,7 +1279,7 @@ function buildLabChart(lab) {
   }
   if (st.modalComparePrev && hasPrev) {
     datasets.push({
-      label: fyLabel(compareFYStart),
+      label: yearLabel(currentYear),
       fyType: 'prev',
       data: prevValues,
       borderColor: prevColor,
@@ -1317,7 +1321,7 @@ function buildLabChart(lab) {
           const first = items?.[0];
           if (!first) return '';
           const snap = tooltipSnapshot(first.datasetIndex, first.dataIndex);
-          return monthLabelFromKey(snap?.monthKey || monthKeyForFYIndex(compareFYStart, first.dataIndex));
+          return monthLabelFromKey(snap?.monthKey || monthKeyForYearIndex(currentYear, first.dataIndex));
         },
         label: (c) => `${c.dataset.label}: ${formatModalMetricValue(metric, c.parsed.y)}`,
         afterBody: (items) => {
@@ -1354,7 +1358,7 @@ function buildLabChart(lab) {
 
   st.chart = new Chart(ctx, {
     type: 'line',
-    data: {labels: FY_MONTH_LABELS, datasets},
+    data: {labels: CAL_MONTH_LABELS, datasets},
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -1364,8 +1368,8 @@ function buildLabChart(lab) {
         st.modalMonthIndex = elements[0].index;
         buildModalInsight({
           metric,
-          fyStart: primaryFYStart,
-          prevFYStart: compareFYStart,
+          baselineYear,
+          currentYear,
           thisSnapshots,
           prevSnapshots,
           thisValues,
@@ -1401,7 +1405,7 @@ function buildLabChart(lab) {
     },
   });
 
-  return {metric, fyStart: primaryFYStart, prevFYStart: compareFYStart, thisSnapshots, prevSnapshots, thisValues, prevValues};
+  return {metric, baselineYear, currentYear, thisSnapshots, prevSnapshots, thisValues, prevValues};
 }
 
 function buildModalInsight(modalData) {
@@ -1410,8 +1414,9 @@ function buildModalInsight(modalData) {
   const idx = st.modalMonthIndex ?? 0;
   const baseline = modalData.thisSnapshots[idx] || null;
   const current = modalData.prevSnapshots[idx] || null;
-  const selected = current || baseline;
-  const monthKey = selected?.monthKey || monthKeyForFYIndex(modalData.prevFYStart, idx);
+  const currentHasData = current && [current.demand, current.capacity, current.load, current.ot].some(v => v != null && Number.isFinite(v));
+  const selected = currentHasData ? current : baseline;
+  const monthKey = selected?.monthKey || monthKeyForYearIndex(modalData.currentYear, idx);
   const metricLabel = modalData.metric === 'load'
     ? 'Load'
     : modalData.metric === 'demand'
@@ -1436,14 +1441,14 @@ function buildModalInsight(modalData) {
     <div class="modal-insight-title">Selected Month · ${monthLabelFromKey(monthKey)}</div>
     <div class="modal-insight-grid">
       <div>
-        <div class="modal-insight-k">${metricLabel} (${fyLabel(modalData.prevFYStart)})</div>
+        <div class="modal-insight-k">${metricLabel} (${yearLabel(modalData.currentYear)})</div>
         <div class="modal-insight-v" style="color:${modalMetricColor(modalData.metric, currentMetric)}">${formatModalMetricValue(modalData.metric, currentMetric)}</div>
-        <div class="modal-insight-sub">${fyLabel(modalData.fyStart)}: ${formatModalMetricValue(modalData.metric, baselineMetric)}</div>
+        <div class="modal-insight-sub">${yearLabel(modalData.baselineYear)}: ${formatModalMetricValue(modalData.metric, baselineMetric)}</div>
       </div>
       <div>
         <div class="modal-insight-k">YoY Delta</div>
         <div class="modal-insight-v" style="color:${deltaColor}">${deltaText}</div>
-        <div class="modal-insight-sub">${fyLabel(modalData.prevFYStart)} vs ${fyLabel(modalData.fyStart)}</div>
+        <div class="modal-insight-sub">${yearLabel(modalData.currentYear)} vs ${yearLabel(modalData.baselineYear)}</div>
       </div>
       <div>
         <div class="modal-insight-k">Demand</div>
@@ -1473,7 +1478,7 @@ function buildModalStats(modalData) {
   const avgBaseline = baselineVals.length ? baselineVals.reduce((a, b) => a + b, 0) / baselineVals.length : null;
   const avgCurrent = currentVals.length ? currentVals.reduce((a, b) => a + b, 0) / currentVals.length : null;
   const peakBaseline = baselineVals.length ? Math.max(...baselineVals) : null;
-  const latestIdx = fiscalMonthIndexFromDate(referenceDate());
+  const latestIdx = calendarMonthIndexFromDate(referenceDate());
   const latestVal = modalData.prevValues[latestIdx] != null ? modalData.prevValues[latestIdx] : (latestMetricIndex(modalData.prevValues) != null ? modalData.prevValues[latestMetricIndex(modalData.prevValues)] : null);
   const latestLabelIdx = modalData.prevValues[latestIdx] != null ? latestIdx : latestMetricIndex(modalData.prevValues);
   const yoyAvg = avgCurrent != null && avgBaseline != null ? avgCurrent - avgBaseline : null;
@@ -1493,19 +1498,19 @@ function buildModalStats(modalData) {
 
   statsEl.innerHTML = `
     <div class="stat-card">
-      <div class="stat-label">Avg ${metricName} · ${fyLabel(modalData.fyStart)}</div>
+      <div class="stat-label">Avg ${metricName} · ${yearLabel(modalData.baselineYear)}</div>
       <div class="stat-value" style="color:${modalMetricColor(modalData.metric, avgBaseline)}">${formatModalMetricValue(modalData.metric, avgBaseline)}</div>
       <div class="stat-sub">
-        ${baselineVals.length ? `${baselineVals.length} month${baselineVals.length === 1 ? '' : 's'} with data` : 'No completed FY data'}
+        ${baselineVals.length ? `${baselineVals.length} month${baselineVals.length === 1 ? '' : 's'} with data` : 'No prior-year data'}
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Peak ${metricName} · ${fyLabel(modalData.fyStart)}</div>
+      <div class="stat-label">Peak ${metricName} · ${yearLabel(modalData.baselineYear)}</div>
       <div class="stat-value" style="color:${modalMetricColor(modalData.metric, peakBaseline)}">${formatModalMetricValue(modalData.metric, peakBaseline)}</div>
       <div class="stat-sub">highest single month</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Avg ${metricName} · ${fyLabel(modalData.prevFYStart)}</div>
+      <div class="stat-label">Avg ${metricName} · ${yearLabel(modalData.currentYear)}</div>
       <div class="stat-value" style="color:${modalMetricColor(modalData.metric, avgCurrent)}">${formatModalMetricValue(modalData.metric, avgCurrent)}</div>
       <div class="stat-sub">
         ${modalData.metric === 'load'
@@ -1514,9 +1519,9 @@ function buildModalStats(modalData) {
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Current ${metricName} · ${fyLabel(modalData.prevFYStart)}</div>
+      <div class="stat-label">Current ${metricName} · ${yearLabel(modalData.currentYear)}</div>
       <div class="stat-value" style="color:${modalMetricColor(modalData.metric, latestVal)}">${formatModalMetricValue(modalData.metric, latestVal)}</div>
-      <div class="stat-sub">${latestLabelIdx != null ? `${FY_MONTH_LABELS[latestLabelIdx]} · YoY avg ${yoyText}` : 'No current FY data'}</div>
+      <div class="stat-sub">${latestLabelIdx != null ? `${CAL_MONTH_LABELS[latestLabelIdx]} · YoY avg ${yoyText}` : 'No current-year data'}</div>
     </div>
   `;
 }
