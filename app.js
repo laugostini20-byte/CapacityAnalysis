@@ -1046,7 +1046,7 @@ function fyStartFromMonthKey(monthKey) {
 }
 
 function fyLabel(fyStartYear) {
-  return `FY${fyStartYear}–${String(fyStartYear + 1).slice(2)}`;
+  return `FY${String(fyStartYear + 1).slice(-2)}`;
 }
 
 function monthLabelFromKey(monthKey) {
