@@ -372,6 +372,14 @@ function onsiteFTE(labName, viewStr) {
   if (!st.scheduleEvents.length) return 0;
   const { start: pStart, end: pEnd, workDays } = getPeriodDates(viewStr);
   const key = labKey(labName);
+  const techDaysAway = onsiteTechDays(labName, viewStr);
+  return workDays > 0 ? techDaysAway / workDays : 0;
+}
+
+function onsiteTechDays(labName, viewStr) {
+  if (!st.scheduleEvents.length) return 0;
+  const { start: pStart, end: pEnd } = getPeriodDates(viewStr);
+  const key = labKey(labName);
   let techDaysAway = 0;
   for (const e of st.scheduleEvents) {
     if (e.labKey !== key || e.techCount <= 0) continue;
@@ -381,7 +389,7 @@ function onsiteFTE(labName, viewStr) {
     const days = (new Date(overlapEnd) - new Date(overlapStart)) / 86400000 + 1;
     techDaysAway += days * e.techCount;
   }
-  return workDays > 0 ? techDaysAway / workDays : 0;
+  return techDaysAway;
 }
 
 function buildLabList() {
@@ -563,11 +571,11 @@ function updateWeekLabel() {
 function renderSummaryCards() {
   const all = st.labList;
   const counts = { over: 0, risk: 0, ok: 0 };
-  let totalOnsite = 0;
+  let totalOnsiteTechDays = 0;
   all.forEach(lab => {
     const m = baseMetrics(lab, st.view);
     const s = m.status;
-    totalOnsite += m.onsite;
+    totalOnsiteTechDays += onsiteTechDays(lab.labName, st.view);
     if (counts[s] !== undefined) counts[s]++;
   });
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -575,9 +583,9 @@ function renderSummaryCards() {
   set('card-over',  counts.over);
   set('card-risk',  counts.risk);
   set('card-ok',    counts.ok);
-  set('card-onsite', fmt(totalOnsite, 1));
+  set('card-onsite', fmtInt(totalOnsiteTechDays));
   const onsiteSub = document.getElementById('card-onsite-sub');
-  if (onsiteSub) onsiteSub.textContent = `avg FTE away · ${st.view}`;
+  if (onsiteSub) onsiteSub.textContent = `tech-days away · ${st.view}`;
 }
 
 function setSegActive(groupId, val, labelMap) {
