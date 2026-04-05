@@ -1056,6 +1056,7 @@ async function openModal(labName) {
 function closeModal() {
   document.getElementById('lab-modal').setAttribute('hidden', '');
   if (st.chart) { st.chart.destroy(); st.chart = null; }
+  hideChartTooltip();
   st.modalLabName = null;
   st.modalMonthIndex = null;
 }
@@ -1067,6 +1068,17 @@ function onModalBackdropClick(e) {
 function monthKeyForYearIndex(year, monthIndex) {
   return `${year}-${CAL_MONTH_SUFFIXES[monthIndex]}`;
 }
+
+const CHART_YEAR_STYLES = {
+  baseline: {
+    line: '#1d4ed8',
+    fill: 'rgba(29,78,216,0.14)',
+  },
+  current: {
+    line: '#f97316',
+    fill: 'rgba(249,115,22,0.14)',
+  },
+};
 
 function yearLabel(year) {
   return String(year);
@@ -1177,6 +1189,142 @@ function modalMetricColor(metric, val) {
   return '#18181b';
 }
 
+function hasModalSnapshotData(snapshot) {
+  return Boolean(snapshot && [snapshot.demand, snapshot.capacity, snapshot.load, snapshot.ot].some(v => v != null && Number.isFinite(v)));
+}
+
+function formatChartDetailValue(type, val) {
+  if (type === 'headcount') {
+    return val != null && Number.isFinite(val) ? `${fmt(val, 1)} techs` : 'N/A';
+  }
+  return formatModalMetricValue(type, val);
+}
+
+function formatMetricDelta(metric, currentValue, baselineValue) {
+  if (currentValue == null || baselineValue == null || !Number.isFinite(currentValue) || !Number.isFinite(baselineValue)) return 'N/A';
+  const delta = currentValue - baselineValue;
+  if (metric === 'load') return `${fmtSgn(delta, 1)}pp`;
+  return `${fmtSgn(delta, 0)} hrs`;
+}
+
+function ensureChartTooltip(wrapper) {
+  let tooltipEl = wrapper.querySelector('.chart-tooltip');
+  if (!tooltipEl) {
+    tooltipEl = document.createElement('div');
+    tooltipEl.className = 'chart-tooltip';
+    wrapper.appendChild(tooltipEl);
+  }
+  return tooltipEl;
+}
+
+function hideChartTooltip() {
+  const wrapper = document.querySelector('.lab-chart-wrap');
+  const tooltipEl = wrapper?.querySelector('.chart-tooltip');
+  if (tooltipEl) tooltipEl.classList.remove('is-visible');
+}
+
+function renderTooltipComparisonCell(label, type, currentValue, baselineValue, currentYear, baselineYear) {
+  const deltaText = type === 'headcount'
+    ? (currentValue != null && baselineValue != null ? `${fmtSgn(currentValue - baselineValue, 1)} techs` : 'N/A')
+    : formatMetricDelta(type, currentValue, baselineValue);
+  return `
+    <div class="chart-tooltip-cell">
+      <div class="chart-tooltip-cell-label">${label}</div>
+      <div class="chart-tooltip-cell-current">${currentYear}: ${formatChartDetailValue(type, currentValue)}</div>
+      <div class="chart-tooltip-cell-base">${baselineYear}: ${formatChartDetailValue(type, baselineValue)}</div>
+      <div class="chart-tooltip-cell-delta">Delta: ${deltaText}</div>
+    </div>
+  `;
+}
+
+function renderChartTooltip(context, tooltipData) {
+  const {chart, tooltip} = context;
+  const wrapper = chart?.canvas?.parentNode;
+  if (!wrapper) return;
+  const tooltipEl = ensureChartTooltip(wrapper);
+
+  if (!tooltip || tooltip.opacity === 0) {
+    tooltipEl.classList.remove('is-visible');
+    return;
+  }
+
+  const dataIndex = tooltip.dataPoints?.[0]?.dataIndex;
+  if (dataIndex == null) {
+    tooltipEl.classList.remove('is-visible');
+    return;
+  }
+
+  const baselineSnap = tooltipData.thisSnapshots[dataIndex] || null;
+  const currentSnap = tooltipData.prevSnapshots[dataIndex] || null;
+  const baselineHasData = hasModalSnapshotData(baselineSnap);
+  const currentHasData = hasModalSnapshotData(currentSnap);
+  const monthKey = currentSnap?.monthKey || baselineSnap?.monthKey || monthKeyForYearIndex(tooltipData.currentYear, dataIndex);
+  const metricLabel = tooltipData.metric === 'load'
+    ? 'Load'
+    : tooltipData.metric === 'demand'
+      ? 'Demand'
+      : tooltipData.metric === 'capacity'
+        ? 'Capacity'
+        : 'OT Needed';
+
+  if (currentHasData && baselineHasData) {
+    const currentMetric = getMetricValue(currentSnap, tooltipData.metric);
+    const baselineMetric = getMetricValue(baselineSnap, tooltipData.metric);
+    tooltipEl.innerHTML = `
+      <div class="chart-tooltip-title">${monthLabelFromKey(monthKey)} comparison</div>
+      <div class="chart-tooltip-years">
+        <div class="chart-tooltip-year-row">
+          <span class="chart-tooltip-swatch" style="background:${CHART_YEAR_STYLES.current.line}"></span>
+          <span class="chart-tooltip-year">${yearLabel(tooltipData.currentYear)}</span>
+          <span class="chart-tooltip-value">${formatModalMetricValue(tooltipData.metric, currentMetric)}</span>
+        </div>
+        <div class="chart-tooltip-year-row">
+          <span class="chart-tooltip-swatch" style="background:${CHART_YEAR_STYLES.baseline.line}"></span>
+          <span class="chart-tooltip-year">${yearLabel(tooltipData.baselineYear)}</span>
+          <span class="chart-tooltip-value">${formatModalMetricValue(tooltipData.metric, baselineMetric)}</span>
+        </div>
+      </div>
+      <div class="chart-tooltip-delta">${metricLabel} delta: <strong>${formatMetricDelta(tooltipData.metric, currentMetric, baselineMetric)}</strong></div>
+      <div class="chart-tooltip-grid">
+        ${renderTooltipComparisonCell('Demand', 'demand', currentSnap.demand, baselineSnap.demand, tooltipData.currentYear, tooltipData.baselineYear)}
+        ${renderTooltipComparisonCell('Capacity', 'capacity', currentSnap.capacity, baselineSnap.capacity, tooltipData.currentYear, tooltipData.baselineYear)}
+        ${renderTooltipComparisonCell('Headcount', 'headcount', currentSnap.techs, baselineSnap.techs, tooltipData.currentYear, tooltipData.baselineYear)}
+      </div>
+    `;
+  } else {
+    const singleSnap = currentHasData ? currentSnap : baselineSnap;
+    const singleYear = currentHasData ? tooltipData.currentYear : tooltipData.baselineYear;
+    const singleColor = currentHasData ? CHART_YEAR_STYLES.current.line : CHART_YEAR_STYLES.baseline.line;
+    const singleMetric = getMetricValue(singleSnap, tooltipData.metric);
+    tooltipEl.innerHTML = `
+      <div class="chart-tooltip-title">${monthLabelFromKey(monthKey)}</div>
+      <div class="chart-tooltip-years">
+        <div class="chart-tooltip-year-row">
+          <span class="chart-tooltip-swatch" style="background:${singleColor}"></span>
+          <span class="chart-tooltip-year">${yearLabel(singleYear)}</span>
+          <span class="chart-tooltip-value">${formatModalMetricValue(tooltipData.metric, singleMetric)}</span>
+        </div>
+      </div>
+      <div class="chart-tooltip-single">
+        <div class="chart-tooltip-single-row"><span>Demand</span><strong>${formatChartDetailValue('demand', singleSnap?.demand)}</strong></div>
+        <div class="chart-tooltip-single-row"><span>Capacity</span><strong>${formatChartDetailValue('capacity', singleSnap?.capacity)}</strong></div>
+        <div class="chart-tooltip-single-row"><span>Headcount</span><strong>${formatChartDetailValue('headcount', singleSnap?.techs)}</strong></div>
+      </div>
+    `;
+  }
+
+  tooltipEl.classList.add('is-visible');
+  const padding = 10;
+  let left = tooltip.caretX - (tooltipEl.offsetWidth / 2);
+  let top = tooltip.caretY - tooltipEl.offsetHeight - 14;
+  left = Math.max(padding, Math.min(left, wrapper.clientWidth - tooltipEl.offsetWidth - padding));
+  if (top < padding) {
+    top = Math.min(wrapper.clientHeight - tooltipEl.offsetHeight - padding, tooltip.caretY + 18);
+  }
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${top}px`;
+}
+
 function latestMetricIndex(values) {
   for (let i = values.length - 1; i >= 0; i--) {
     if (values[i] != null && Number.isFinite(values[i])) return i;
@@ -1257,8 +1405,8 @@ function buildLabChart(lab) {
       : latestMetricIndex(prevValues) ?? latestMetricIndex(thisValues) ?? currentMonthIdx;
   }
 
-  const thisColor = metric === 'load' ? '#2563eb' : metric === 'demand' ? '#4f46e5' : metric === 'capacity' ? '#0f766e' : '#dc2626';
-  const prevColor = metric === 'load' ? '#94a3b8' : metric === 'demand' ? '#a78bfa' : metric === 'capacity' ? '#6ee7b7' : '#fca5a5';
+  const baselineStyle = CHART_YEAR_STYLES.baseline;
+  const currentStyle = CHART_YEAR_STYLES.current;
 
   const datasets = [];
   if (hasThis) {
@@ -1266,16 +1414,19 @@ function buildLabChart(lab) {
       label: yearLabel(baselineYear),
       fyType: 'this',
       data: thisValues,
-      borderColor: thisColor,
-      backgroundColor: `${thisColor}22`,
-      borderWidth: 2.8,
-      tension: 0.3,
+      borderColor: baselineStyle.line,
+      backgroundColor: baselineStyle.fill,
+      borderWidth: 3.2,
+      tension: 0.28,
       spanGaps: true,
+      pointBackgroundColor: baselineStyle.line,
+      pointBorderColor: '#ffffff',
+      pointBorderWidth: 2,
       pointRadius: (ctx) => {
         if (ctx.parsed?.y == null) return 0;
-        return ctx.dataIndex === st.modalMonthIndex ? 6 : 3;
+        return ctx.dataIndex === st.modalMonthIndex ? 6.5 : 3.5;
       },
-      pointHoverRadius: 7,
+      pointHoverRadius: 8,
       fill: false,
     });
   }
@@ -1284,16 +1435,20 @@ function buildLabChart(lab) {
       label: yearLabel(currentYear),
       fyType: 'prev',
       data: prevValues,
-      borderColor: prevColor,
-      borderDash: [5, 4],
-      borderWidth: 2,
-      tension: 0.3,
+      borderColor: currentStyle.line,
+      backgroundColor: currentStyle.fill,
+      borderDash: [7, 5],
+      borderWidth: 3,
+      tension: 0.28,
       spanGaps: true,
+      pointBackgroundColor: currentStyle.line,
+      pointBorderColor: '#ffffff',
+      pointBorderWidth: 2,
       pointRadius: (ctx) => {
         if (ctx.parsed?.y == null) return 0;
-        return ctx.dataIndex === st.modalMonthIndex ? 5 : 2.5;
+        return ctx.dataIndex === st.modalMonthIndex ? 6 : 3.5;
       },
-      pointHoverRadius: 6,
+      pointHoverRadius: 8,
       fill: false,
     });
   }
@@ -1306,38 +1461,21 @@ function buildLabChart(lab) {
     ? Math.max(120, Math.ceil((maxVal + 8) / 10) * 10)
     : Math.max(100, Math.ceil((maxVal * 1.18) / 50) * 50);
 
-  const tooltipSnapshot = (datasetIndex, dataIndex) => {
-    const ds = datasets[datasetIndex];
-    if (!ds) return null;
-    return ds.fyType === 'prev' ? prevSnapshots[dataIndex] : thisSnapshots[dataIndex];
-  };
-
   const ctx = document.getElementById('lab-chart');
   if (st.chart) { st.chart.destroy(); st.chart = null; }
+  hideChartTooltip();
 
   const plugins = {
     legend: {position: 'top', labels: {font: {size: 11}, padding: 12, boxWidth: 24}},
     tooltip: {
-      callbacks: {
-        title: (items) => {
-          const first = items?.[0];
-          if (!first) return '';
-          const snap = tooltipSnapshot(first.datasetIndex, first.dataIndex);
-          return monthLabelFromKey(snap?.monthKey || monthKeyForYearIndex(currentYear, first.dataIndex));
-        },
-        label: (c) => `${c.dataset.label}: ${formatModalMetricValue(metric, c.parsed.y)}`,
-        afterBody: (items) => {
-          const first = items?.[0];
-          if (!first) return [];
-          const snap = tooltipSnapshot(first.datasetIndex, first.dataIndex);
-          if (!snap) return [];
-          return [
-            `Demand: ${formatModalMetricValue('demand', snap.demand)}`,
-            `Capacity: ${formatModalMetricValue('capacity', snap.capacity)}`,
-            `Headcount: ${snap.techs != null ? fmt(snap.techs, 1) : '—'} techs`,
-          ];
-        },
-      },
+      enabled: false,
+      external: (context) => renderChartTooltip(context, {
+        metric,
+        baselineYear,
+        currentYear,
+        thisSnapshots,
+        prevSnapshots,
+      }),
     },
   };
 
