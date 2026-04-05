@@ -100,7 +100,7 @@ const st = {
   view: 'weekly',
   tab: 'status-board',
   weekOffset: 0,               // weeks forward/back from today (for week nav)
-  filters: { system: 'all', status: 'all', search: '' },
+  filters: { system: 'all', status: 'all', selectedLabs: new Set() },
   sortKey: 'load',
   sortDir: -1,                 // -1 = desc (highest load first)
   labList: [],                 // final computed array of lab objects
@@ -129,6 +129,9 @@ const st = {
   modalLabName: null,
   chart: null,
 };
+
+let labPickerInitialized = false;
+let labPickerSearchTerm = '';
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 function labKey(name) {
@@ -542,6 +545,148 @@ function setFilter(key, val) {
   renderStatusBoard();
 }
 
+function getAvailableLabNames() {
+  return [...new Set(st.labList.map(l => l.labName))].sort((a, b) => a.localeCompare(b));
+}
+
+function updateLabPickerSummary(availableLabNames = getAvailableLabNames()) {
+  const summaryEl = document.getElementById('lab-picker-summary');
+  if (!summaryEl) return;
+  const selectedCount = st.filters.selectedLabs.size;
+  const totalCount = availableLabNames.length;
+  if (!totalCount) {
+    summaryEl.textContent = 'No labs available';
+    return;
+  }
+  if (selectedCount === 0) {
+    summaryEl.textContent = 'No labs selected';
+    return;
+  }
+  if (selectedCount === totalCount) {
+    summaryEl.textContent = 'All labs';
+    return;
+  }
+  summaryEl.textContent = selectedCount === 1 ? '1 lab selected' : `${selectedCount} labs selected`;
+}
+
+function syncLabPickerSelection(availableLabNames) {
+  const availableSet = new Set(availableLabNames);
+  const filteredSelected = [...st.filters.selectedLabs].filter(name => availableSet.has(name));
+  if (!labPickerInitialized) {
+    st.filters.selectedLabs = new Set(availableLabNames);
+    labPickerInitialized = true;
+    return;
+  }
+  if (st.filters.selectedLabs.size > 0 && filteredSelected.length === 0 && availableLabNames.length) {
+    st.filters.selectedLabs = new Set(availableLabNames);
+    return;
+  }
+  st.filters.selectedLabs = new Set(filteredSelected);
+}
+
+function renderLabPickerOptions() {
+  const menu = document.getElementById('lab-picker-menu');
+  if (!menu) return;
+  const availableLabNames = getAvailableLabNames();
+  syncLabPickerSelection(availableLabNames);
+  updateLabPickerSummary(availableLabNames);
+
+  if (!availableLabNames.length) {
+    labPickerSearchTerm = '';
+    menu.innerHTML = '<div class="lab-picker-empty">No labs available for this view.</div>';
+    return;
+  }
+
+  const optionsHtml = availableLabNames
+    .map(name => `<label class="lab-picker-option" data-lab-key="${esc(labKey(name))}"><input type="checkbox" value="${esc(name)}" onchange="toggleLabSelection(this.value, this.checked)" ${st.filters.selectedLabs.has(name) ? 'checked' : ''}><span>${esc(name)}</span></label>`)
+    .join('');
+
+  menu.innerHTML = `
+    <div class="lab-picker-actions">
+      <button type="button" class="lab-picker-action" onclick="selectAllLabs(event)">Select all</button>
+      <button type="button" class="lab-picker-action" onclick="deselectAllLabs(event)">Deselect all</button>
+    </div>
+    <div class="lab-picker-search-wrap">
+      <input type="text" class="lab-picker-search" id="lab-picker-search" placeholder="Search labs..." value="${esc(labPickerSearchTerm)}" oninput="onLabPickerSearchInput(this.value)">
+    </div>
+    <div class="lab-picker-list" id="lab-picker-list">${optionsHtml}</div>
+    <div class="lab-picker-empty" id="lab-picker-no-results" hidden>No labs match your search.</div>
+  `;
+  applyLabPickerSearch();
+}
+
+function toggleLabSelection(labName, isSelected) {
+  if (isSelected) st.filters.selectedLabs.add(labName);
+  else st.filters.selectedLabs.delete(labName);
+  updateLabPickerSummary();
+  renderStatusBoard();
+}
+
+function selectAllLabs(e) {
+  if (e) e.stopPropagation();
+  st.filters.selectedLabs = new Set(getAvailableLabNames());
+  renderLabPickerOptions();
+  renderStatusBoard();
+}
+
+function deselectAllLabs(e) {
+  if (e) e.stopPropagation();
+  st.filters.selectedLabs.clear();
+  renderLabPickerOptions();
+  renderStatusBoard();
+}
+
+function onLabPickerSearchInput(value) {
+  labPickerSearchTerm = labKey(value || '');
+  applyLabPickerSearch();
+}
+
+function applyLabPickerSearch() {
+  const list = document.getElementById('lab-picker-list');
+  if (!list) return;
+  const noResultsEl = document.getElementById('lab-picker-no-results');
+  const options = list.querySelectorAll('.lab-picker-option');
+  let shownCount = 0;
+  options.forEach(option => {
+    const key = option.getAttribute('data-lab-key') || '';
+    const isMatch = !labPickerSearchTerm || key.includes(labPickerSearchTerm);
+    option.style.display = isMatch ? '' : 'none';
+    if (isMatch) shownCount += 1;
+  });
+  if (noResultsEl) noResultsEl.style.display = shownCount === 0 ? 'block' : 'none';
+}
+
+function toggleLabPickerMenu(e) {
+  if (e) e.stopPropagation();
+  const picker = document.getElementById('lab-picker');
+  const menu = document.getElementById('lab-picker-menu');
+  if (!picker || !menu) return;
+  const isHidden = menu.hasAttribute('hidden');
+  if (isHidden) {
+    menu.removeAttribute('hidden');
+    picker.classList.add('open');
+    const searchInput = document.getElementById('lab-picker-search');
+    if (searchInput) searchInput.focus();
+  } else {
+    menu.setAttribute('hidden', '');
+    picker.classList.remove('open');
+  }
+}
+
+function closeLabPickerMenu() {
+  const picker = document.getElementById('lab-picker');
+  const menu = document.getElementById('lab-picker-menu');
+  if (!picker || !menu) return;
+  menu.setAttribute('hidden', '');
+  picker.classList.remove('open');
+}
+
+function handleDocumentClickForLabPicker(e) {
+  const picker = document.getElementById('lab-picker');
+  if (!picker) return;
+  if (!picker.contains(e.target)) closeLabPickerMenu();
+}
+
 // ─── WEEK NAVIGATION ─────────────────────────────────────────────────────────
 function shiftWeek(delta) {
   st.weekOffset += delta;
@@ -625,13 +770,13 @@ function sortBy(key) {
 
 // ─── STATUS BOARD ────────────────────────────────────────────────────────────
 function filteredLabs() {
-  const { system, status, search } = st.filters;
-  const q = (search || '').toLowerCase();
+  const { system, status } = st.filters;
+  const selected = st.filters.selectedLabs;
   return st.labList.filter(lab => {
     if (system !== 'all' && lab.systemType !== system) return false;
+    if (!selected.has(lab.labName)) return false;
     const m = baseMetrics(lab, st.view);
     if (status !== 'all' && m.status !== status) return false;
-    if (q && !lab.labName.toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -672,6 +817,7 @@ function sortedLabs(labs) {
 function renderStatusBoard() {
   updateWeekLabel();
   renderSummaryCards();
+  renderLabPickerOptions();
   const labs = sortedLabs(filteredLabs());
   const tbody = document.getElementById('status-tbody');
   if (!labs.length) {
@@ -1281,6 +1427,7 @@ async function submitUpload(e, type) {
 async function init() {
   updateTableHeaders();
   updateWeekLabel();
+  document.addEventListener('click', handleDocumentClickForLabPicker);
   await loadData();
   renderStatusBoard();
 }
