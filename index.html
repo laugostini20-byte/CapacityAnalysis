@@ -286,7 +286,28 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
     </div>
   </div>
 
+  <details id="assumptions-panel">
+    <summary>Assumptions</summary>
+    <div class="assumption-body">
+      Shift: 8 hrs &nbsp;·&nbsp; Default productivity: 70% (5.6 hrs/day) &nbsp;·&nbsp;
+      Weeks/month: 4.33 &nbsp;·&nbsp; Weeks/quarter: 12.99 &nbsp;·&nbsp; Weeks/year: 51.96
+      <div class="assumption-note" id="prod-override-note" hidden>
+        Some labs have custom productivity settings — see Prod % column.
+      </div>
+    </div>
+  </details>
+
   <div id="filter-bar">
+    <div class="filter-group">
+      <span class="filter-label">Labs</span>
+      <div class="lab-picker" id="lab-picker">
+        <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
+          <span id="lab-picker-summary">All labs</span>
+          <span class="lab-picker-caret">▾</span>
+        </button>
+        <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
+      </div>
+    </div>
     <div class="filter-group">
       <span class="filter-label">System</span>
       <div class="seg-group" id="seg-system">
@@ -313,28 +334,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
         <button class="seg-btn" onclick="setView('yearly')">Yearly</button>
       </div>
     </div>
-    <div class="filter-group" style="margin-left:auto">
-      <span class="filter-label">Labs</span>
-      <div class="lab-picker" id="lab-picker">
-        <button type="button" class="lab-picker-btn" id="lab-picker-btn" onclick="toggleLabPickerMenu(event)">
-          <span id="lab-picker-summary">All labs</span>
-          <span class="lab-picker-caret">▾</span>
-        </button>
-        <div class="lab-picker-menu" id="lab-picker-menu" hidden></div>
-      </div>
-    </div>
   </div>
-
-  <details id="assumptions-panel">
-    <summary>Assumptions</summary>
-    <div class="assumption-body">
-      Shift: 8 hrs &nbsp;·&nbsp; Default productivity: 70% (5.6 hrs/day) &nbsp;·&nbsp;
-      Weeks/month: 4.33 &nbsp;·&nbsp; Weeks/quarter: 12.99 &nbsp;·&nbsp; Weeks/year: 51.96
-      <div class="assumption-note" id="prod-override-note" hidden>
-        Some labs have custom productivity settings — see Prod % column.
-      </div>
-    </div>
-  </details>
 
   <div id="status-table-wrap">
     <table id="status-table">
