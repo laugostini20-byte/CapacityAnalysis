@@ -141,7 +141,6 @@ let labPickerInitialized = false;
 let labPickerSearchTerm = '';
 let scenLabPickerSearchTerm = '';
 let headerHelpTipEl = null;
-let scenResultsRenderTimer = null;
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 function labKey(name) {
@@ -259,6 +258,10 @@ function statusBadgeClass(s) {
   return s === 'over' ? 'badge-over' : s === 'risk' ? 'badge-risk' : 'badge-ok';
 }
 
+function scenarioStatusColor(status) {
+  return status === 'ok' ? '#16a34a' : status === 'risk' ? '#d97706' : '#ef4444';
+}
+
 // Baseline metrics (no OT boost)
 function baseMetrics(lab, viewStr) {
   const s = scale(viewStr);
@@ -274,7 +277,7 @@ function baseMetrics(lab, viewStr) {
   return { demand, capacity, margin, loadPct, otHrs, onsite, avail, status };
 }
 
-// Scenario metrics (OT-boosted capacity for load/margin/status; raw capacity for OT Hrs)
+// Scenario metrics use OT-adjusted capacity consistently for capacity, margin, load, and remaining OT.
 function scenMetrics(lab, inputs, global, viewStr) {
   const s = scale(viewStr);
   const demandDeltaWeekly = toWeeklyDelta(inputs.demandVal ?? 0, inputs.demandUnit ?? 'weekly');
@@ -295,7 +298,7 @@ function scenMetrics(lab, inputs, global, viewStr) {
   const effectiveCap = capacity + (otPerWeek * s);
   const margin = effectiveCap - demand;
   const loadPct = effectiveCap > 0 ? (demand / effectiveCap) * 100 : (demand > 0 ? Infinity : 0);
-  const otHrs = Math.max(0, demand - capacity);  // raw (no OT boost)
+  const otHrs = Math.max(0, demand - effectiveCap);
   const status = getStatus(loadPct);
 
   return { demand, capacity, effectiveCap, margin, loadPct, otHrs, status, scenTechs, scenAvail };
@@ -1777,7 +1780,7 @@ function setGlobalField(field, rawValue) {
     st.scen.globalDaysDelta = clamp(Math.round(n), -4, 4);
   }
   syncScenarioGlobalInputs();
-  renderScenarioResults();
+  refreshScenarioComputedOutputs();
 }
 
 function addScenLab(labName) {
@@ -1910,6 +1913,83 @@ function getScenGlobal() {
   return { ot: st.scen.globalOt, prodAdj: st.scen.globalProdAdj, daysDelta: st.scen.globalDaysDelta };
 }
 
+function buildScenarioSubLabel(inputs, global) {
+  const demVal = inputs.demandVal ?? 0;
+  const demUnit = inputs.demandUnit ?? 'weekly';
+  const hireTechs = inputs.hireTechs ?? 0;
+  const otOverrideVal = inputs.otOverride;
+  return [
+    hireTechs !== 0 ? `${hireTechs > 0 ? '+' : ''}${hireTechs} techs` : null,
+    demVal !== 0 ? `${demVal > 0 ? '+' : ''}${demVal.toLocaleString()} ${demUnit} hrs demand` : null,
+    `${otOverrideVal ?? global.ot} OT hrs/wk ${otOverrideVal == null ? '(global)' : '(override)'}`,
+  ].filter(Boolean).join(' · ');
+}
+
+function updateScenarioRowBlock(lab) {
+  const block = document.querySelector(`.scen-lab-block[data-scen-lab="${encodeURIComponent(lab.labName)}"]`);
+  if (!block) return;
+
+  const inputs = st.scen.perLab[lab.labName] ?? {};
+  const g = getScenGlobal();
+  const sv = st.scen.view;
+  const s = scenMetrics(lab, inputs, g, sv);
+  const rc = s.status;
+  const weeklyEquiv = toWeeklyDelta(inputs.demandVal ?? 0, inputs.demandUnit ?? 'weekly');
+  const subLabel = buildScenarioSubLabel(inputs, g) || 'No changes applied';
+  const otOverrideVal = inputs.otOverride;
+
+  const resultRow = block.querySelector('.row-result');
+  if (resultRow) resultRow.className = `scen-row row-result s-${rc}`;
+
+  const labelEl = block.querySelector('.scen-result-label');
+  if (labelEl) labelEl.style.color = scenarioStatusColor(rc);
+  const subLabelEl = block.querySelector('.scen-result-sublabel');
+  if (subLabelEl) subLabelEl.textContent = subLabel;
+
+  const setText = (selector, value) => {
+    const el = block.querySelector(selector);
+    if (el) el.textContent = value;
+  };
+  setText('.scen-result-techs', fmtInt(s.scenTechs));
+  setText('.scen-result-avail', fmt(s.scenAvail, 1));
+  setText('.scen-result-demand', fmtInt(s.demand));
+  setText('.scen-result-capacity', fmtInt(s.effectiveCap));
+  setText('.scen-result-margin', fmtSgn(s.margin, 0));
+  setText('.scen-result-load', `${fmt(s.loadPct, 1)}%`);
+  setText('.scen-result-ot', s.otHrs > 0 ? fmtInt(s.otHrs) : '—');
+
+  const marginEl = block.querySelector('.scen-result-margin');
+  if (marginEl) marginEl.className = `scen-result-margin ${s.margin >= 0 ? 'margin-pos' : 'margin-neg'}`;
+  const loadEl = block.querySelector('.scen-result-load');
+  if (loadEl) loadEl.className = `scen-result-load load-${rc}`;
+  const otEl = block.querySelector('.scen-result-ot');
+  if (otEl) otEl.className = `scen-result-ot ${s.otHrs > 0 ? 'ot-pos' : 'ot-zero'}`;
+
+  const otInput = block.querySelector('.scen-ot-input');
+  if (otInput) otInput.placeholder = `Use global (${g.ot})`;
+  const otHint = block.querySelector('.scen-ot-hint');
+  if (otHint) otHint.textContent = otOverrideVal == null ? `Using global default: ${g.ot}` : 'Blank resets to global';
+
+  const equivEl = block.querySelector('.ri-equiv');
+  if (equivEl) {
+    if (Math.abs(weeklyEquiv) > 0.1) {
+      equivEl.textContent = `≈ ${weeklyEquiv > 0 ? '+' : ''}${fmt(weeklyEquiv, 1)}/wk`;
+      equivEl.hidden = false;
+    } else {
+      equivEl.textContent = '';
+      equivEl.hidden = true;
+    }
+  }
+}
+
+function refreshScenarioComputedOutputs() {
+  renderImpactCards();
+  [...st.scen.selectedLabs]
+    .map(name => st.labList.find(l => l.labName === name))
+    .filter(Boolean)
+    .forEach(updateScenarioRowBlock);
+}
+
 function renderScenarioResults() {
   renderImpactCards();
   renderScenRows();
@@ -1969,17 +2049,12 @@ function renderScenRows() {
     const labNameEsc = esc(lab.labName);
     const labNameShort = esc(lab.labName.length > 18 ? `${lab.labName.slice(0, 18)}…` : lab.labName);
     const encodedLabName = encodeURIComponent(lab.labName);
+    const subLabel = buildScenarioSubLabel(inputs, g);
 
-    const subLabel = [
-      hireTechs !== 0 ? `${hireTechs > 0 ? '+' : ''}${hireTechs} techs` : null,
-      demVal !== 0 ? `${demVal > 0 ? '+' : ''}${demVal.toLocaleString()} ${demUnit} hrs demand` : null,
-      `${otOverrideVal ?? g.ot} OT hrs/wk ${otOverrideVal == null ? '(global)' : '(override)'}`,
-    ].filter(Boolean).join(' · ');
-
-    return `<div class="scen-lab-block">
+    return `<div class="scen-lab-block" data-scen-lab="${encodedLabName}">
       <div class="scen-row row-baseline s-${sc}">
         <div><div class="scen-row-label" style="font-weight:600">${labNameEsc}</div><div class="scen-row-sublabel">Baseline · current</div></div>
-        <span>${lab.totalTechs}</span><span>${fmt(baseMetrics(lab, st.scen.view).avail, 1)}</span>
+        <span>${fmtInt(lab.totalTechs)}</span><span>${fmt(b.avail, 1)}</span>
         <span>${fmtInt(b.demand)}</span><span>${fmtInt(b.capacity)}</span>
         <span class="${b.margin >= 0 ? 'margin-pos' : 'margin-neg'}">${fmtSgn(b.margin,0)}</span>
         <span class="${'load-' + sc}">${fmt(b.loadPct,1)}%</span>
@@ -1991,41 +2066,41 @@ function renderScenRows() {
 
         <label class="scen-field scen-field-hire">
           <span class="scen-field-label">Hire techs</span>
-          <input class="scen-number-input" type="number" step="1" value="${hireTechs}" onchange="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'hireTechs',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+          <input class="scen-number-input" type="number" step="1" value="${hireTechs}" oninput="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'hireTechs',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
         </label>
 
         <label class="scen-field scen-field-demand">
           <span class="scen-field-label">Demand delta</span>
           <div class="scen-field-inline">
-            <input class="scen-number-input" type="number" step="1" value="${demVal}" onchange="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'demandVal',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+            <input class="scen-number-input" type="number" step="1" value="${demVal}" oninput="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'demandVal',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
             <select class="ri-unit" onchange="setPerLabUnit(decodeURIComponent('${encodedLabName}'),this.value)">
             <option value="weekly" ${demUnit==='weekly'?'selected':''}>wk hrs</option>
             <option value="monthly" ${demUnit==='monthly'?'selected':''}>mo hrs</option>
             <option value="annual" ${demUnit==='annual'?'selected':''}>annual hrs</option>
           </select>
           </div>
-          ${Math.abs(weeklyEquiv) > 0.1 ? `<span class="ri-equiv">≈ ${weeklyEquiv > 0?'+':''}${fmt(weeklyEquiv,1)}/wk</span>` : ''}
+          <span class="ri-equiv" ${Math.abs(weeklyEquiv) > 0.1 ? '' : 'hidden'}>${Math.abs(weeklyEquiv) > 0.1 ? `≈ ${weeklyEquiv > 0?'+':''}${fmt(weeklyEquiv,1)}/wk` : ''}</span>
         </label>
 
         <label class="scen-field scen-field-ot">
           <span class="scen-field-label">OT override</span>
-          <input class="scen-number-input" type="number" min="0" step="1" value="${otOverrideVal ?? ''}" placeholder="Use global (${g.ot})" onchange="setPerLabOt(decodeURIComponent('${encodedLabName}'),this.value)" onkeydown="handleScenarioNumberKeydown(event)">
-          <span class="scen-field-hint">${otOverrideVal == null ? `Using global default: ${g.ot}` : 'Blank resets to global'}</span>
+          <input class="scen-number-input scen-ot-input" type="number" min="0" step="1" value="${otOverrideVal ?? ''}" placeholder="Use global (${g.ot})" oninput="setPerLabOt(decodeURIComponent('${encodedLabName}'),this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+          <span class="scen-field-hint scen-ot-hint">${otOverrideVal == null ? `Using global default: ${g.ot}` : 'Blank resets to global'}</span>
         </label>
       </div>
 
       <div class="scen-row row-result s-${rc}">
         <div>
-          <div class="scen-row-label" style="font-size:11px;color:${rc==='ok'?'#16a34a':rc==='risk'?'#d97706':'#ef4444'};font-weight:600">↳ With scenario</div>
-          <div class="scen-row-sublabel">${esc(subLabel) || 'No changes applied'}</div>
+          <div class="scen-row-label scen-result-label" style="font-size:11px;color:${scenarioStatusColor(rc)};font-weight:600">↳ With scenario</div>
+          <div class="scen-row-sublabel scen-result-sublabel">${esc(subLabel) || 'No changes applied'}</div>
         </div>
-        <span style="font-weight:600">${s.scenTechs}</span>
-        <span style="font-weight:600">${s.scenAvail}</span>
-        <span>${fmtInt(s.demand)}</span>
-        <span>${fmtInt(s.effectiveCap)}</span>
-        <span class="${s.margin >= 0 ? 'margin-pos' : 'margin-neg'}">${fmtSgn(s.margin,0)}</span>
-        <span class="${'load-' + rc}">${fmt(s.loadPct,1)}%</span>
-        <span class="${s.otHrs > 0 ? 'ot-pos' : 'ot-zero'}">${s.otHrs > 0 ? fmtInt(s.otHrs) : '—'}</span>
+        <span class="scen-result-techs" style="font-weight:600">${fmtInt(s.scenTechs)}</span>
+        <span class="scen-result-avail" style="font-weight:600">${fmt(s.scenAvail,1)}</span>
+        <span class="scen-result-demand">${fmtInt(s.demand)}</span>
+        <span class="scen-result-capacity">${fmtInt(s.effectiveCap)}</span>
+        <span class="scen-result-margin ${s.margin >= 0 ? 'margin-pos' : 'margin-neg'}">${fmtSgn(s.margin,0)}</span>
+        <span class="scen-result-load ${'load-' + rc}">${fmt(s.loadPct,1)}%</span>
+        <span class="scen-result-ot ${s.otHrs > 0 ? 'ot-pos' : 'ot-zero'}">${s.otHrs > 0 ? fmtInt(s.otHrs) : '—'}</span>
       </div>
     </div>`;
   }).join('');
@@ -2036,26 +2111,6 @@ function getOrInitPerLab(labName) {
     st.scen.perLab[labName] = { demandVal: 0, demandUnit: 'weekly', hireTechs: 0, otOverride: null, daysOverride: null, prodOverride: null };
   }
   return st.scen.perLab[labName];
-}
-
-function flushScenarioResultsIfIdle() {
-  const active = document.activeElement;
-  if (active?.closest && active.closest('#scen-rows')) return;
-  renderScenarioResults();
-}
-
-function scheduleScenarioResultsRefresh() {
-  if (scenResultsRenderTimer) clearTimeout(scenResultsRenderTimer);
-  scenResultsRenderTimer = setTimeout(() => {
-    scenResultsRenderTimer = null;
-    flushScenarioResultsIfIdle();
-  }, 120);
-}
-
-function handleScenarioRowsFocusOut(e) {
-  const rows = document.getElementById('scen-rows');
-  if (!rows || !rows.contains(e.target)) return;
-  setTimeout(flushScenarioResultsIfIdle, 0);
 }
 
 function handleScenarioNumberKeydown(event) {
@@ -2069,13 +2124,13 @@ function setPerLabNumber(labName, field, rawValue) {
   const n = Number(rawValue);
   if (!Number.isFinite(n)) return;
   p[field] = Math.round(n);
-  scheduleScenarioResultsRefresh();
+  refreshScenarioComputedOutputs();
 }
 
 function setPerLabUnit(labName, unit) {
   const p = getOrInitPerLab(labName);
   p.demandUnit = unit;
-  scheduleScenarioResultsRefresh();
+  refreshScenarioComputedOutputs();
 }
 
 function setPerLabOt(labName, rawValue) {
@@ -2088,7 +2143,7 @@ function setPerLabOt(labName, rawValue) {
     if (!Number.isFinite(n)) return;
     p.otOverride = Math.max(0, Math.round(n));
   }
-  scheduleScenarioResultsRefresh();
+  refreshScenarioComputedOutputs();
 }
 
 async function saveCurrentScenario() {
@@ -2327,7 +2382,6 @@ async function init() {
   updateWeekLabel();
   initHeaderTooltips();
   document.addEventListener('click', handleDocumentClickForLabPicker);
-  document.addEventListener('focusout', handleScenarioRowsFocusOut);
   await loadData();
   renderStatusBoard();
 }
