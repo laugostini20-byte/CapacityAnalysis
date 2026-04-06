@@ -1217,6 +1217,21 @@ function getChartHeadcountForDate(labName, refDate) {
   return getHeadcountForDate(labName, refDate);
 }
 
+function onsiteTechDaysForRange(labName, startDate, endDate) {
+  if (!st.scheduleEvents.length) return 0;
+  const key = mapToCanonicalLabKey(labName);
+  let techDaysAway = 0;
+  for (const e of st.scheduleEvents) {
+    if (e.labKey !== key || e.techCount <= 0) continue;
+    const overlapStart = e.startDate > startDate ? e.startDate : startDate;
+    const overlapEnd = e.endDate < endDate ? e.endDate : endDate;
+    if (overlapStart > overlapEnd) continue;
+    const days = (new Date(`${overlapEnd}T00:00:00`) - new Date(`${overlapStart}T00:00:00`)) / 86400000 + 1;
+    techDaysAway += days * e.techCount;
+  }
+  return techDaysAway;
+}
+
 function getMetricValue(snapshot, metric) {
   if (!snapshot) return null;
   if (metric === 'demand') return snapshot.demand;
@@ -1368,11 +1383,24 @@ function buildHistoricalMonthlySnapshot(lab, monthKey) {
   return buildComparableMonthlySnapshot(lab, monthKey, demand);
 }
 
+function buildProjectedMonthlySnapshot(lab, monthKey, demandOverride = null) {
+  const range = monthRangeFromKey(monthKey);
+  if (!range) return buildEmptyMonthlySnapshot(monthKey);
+  const projectedDemand = getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH;
+  const demand = demandOverride != null && Number.isFinite(demandOverride) ? demandOverride : projectedDemand;
+  const techs = getChartHeadcountForDate(lab.labName, range.refDate) ?? lab.totalTechs;
+  const periodWorkDays = Math.max(1, lab.daysPerWeek * WEEKS_PER_MONTH);
+  const onsite = onsiteTechDaysForRange(lab.labName, range.startDate, range.endDate) / periodWorkDays;
+  const avail = Math.max(0, techs - onsite);
+  const capacity = avail * (SHIFT_HRS * lab.productivityPct / 100) * periodWorkDays;
+  const load = capacity > 0 ? (demand / capacity) * 100 : (demand > 0 ? Infinity : 0);
+  const ot = Math.max(0, demand - capacity);
+  return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
+}
+
 function buildCurrentYearMonthlySnapshot(lab, monthKey) {
-  // Use the same headcount-based capacity basis as the historical series so
-  // year-over-year modal comparisons stay consistent across labs and months.
   const historicalDemand = getHistoricalWipForMonth(lab.labName, monthKey, toISODate(referenceDate()));
-  return buildComparableMonthlySnapshot(lab, monthKey, historicalDemand);
+  return buildProjectedMonthlySnapshot(lab, monthKey, historicalDemand);
 }
 
 function buildYearMonthlySnapshots(lab, year, truncateAfterIndex = null, source = 'projected') {
@@ -1381,7 +1409,7 @@ function buildYearMonthlySnapshots(lab, year, truncateAfterIndex = null, source 
     if (truncateAfterIndex != null && idx > truncateAfterIndex) return buildEmptyMonthlySnapshot(monthKey);
     if (source === 'historical') return buildHistoricalMonthlySnapshot(lab, monthKey);
     if (source === 'current-year') return buildCurrentYearMonthlySnapshot(lab, monthKey);
-    return buildComparableMonthlySnapshot(lab, monthKey);
+    return buildProjectedMonthlySnapshot(lab, monthKey);
   });
 }
 
