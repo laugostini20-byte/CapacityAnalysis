@@ -222,13 +222,13 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .impact-ot-val{font-size:12px;font-weight:700;color:#52525b}
 
 /* SCENARIO RESULTS TABLE */
-.scen-results-wrap{background:#fff;border:1px solid #d0dce8;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
+.scen-results-wrap{background:#fff;border:1px solid #d0dce8;border-radius:14px;overflow-x:auto;overflow-y:hidden;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
 .scen-results-header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #e4e4e7;background:#fafafa;flex-wrap:wrap}
-.scen-col-heads{display:grid;grid-template-columns:minmax(220px,2.25fr) repeat(7,minmax(84px,.8fr));gap:10px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #e4e4e7;font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.4px}
+.scen-col-heads{display:grid;grid-template-columns:minmax(220px,2.25fr) repeat(8,minmax(84px,.8fr));gap:10px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #e4e4e7;font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.4px}
 .scen-col-heads span:not(:first-child){text-align:right}
 .scen-lab-block{border-top:1px solid #e4e4e7}
 .scen-lab-block:first-child{border-top:none}
-.scen-row{display:grid;grid-template-columns:minmax(220px,2.25fr) repeat(7,minmax(84px,.8fr));gap:10px;padding:10px 16px;align-items:center;font-size:13px}
+.scen-row{display:grid;grid-template-columns:minmax(220px,2.25fr) repeat(8,minmax(84px,.8fr));gap:10px;padding:10px 16px;align-items:center;font-size:13px}
 .scen-row > span{font-variant-numeric:tabular-nums}
 .scen-row > span:not(:first-child){text-align:right}
 .scen-row-label{line-height:1.2}
@@ -241,12 +241,13 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .row-result.s-over{background:#fef2f2;border-left-color:#ef4444}
 .row-result.s-risk{background:#fffbeb;border-left-color:#f59e0b}
 .row-result.s-ok{background:#f0fdf4;border-left-color:#16a34a}
-.row-inputs{background:#f8fafc;border-top:1px solid #e4e4e7;border-left:3px solid #d1d5db;padding:12px 16px;display:grid;grid-template-columns:minmax(220px,2.25fr) repeat(7,minmax(84px,.8fr));gap:10px;align-items:start}
+.row-inputs{background:#f8fafc;border-top:1px solid #e4e4e7;border-left:3px solid #d1d5db;padding:12px 16px;display:grid;grid-template-columns:minmax(220px,2.25fr) repeat(8,minmax(84px,.8fr));gap:10px;align-items:start}
 .row-inputs-label{grid-column:1;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;padding-top:27px}
 .scen-field{display:flex;flex-direction:column;gap:6px;min-width:0}
-.scen-field-demand{grid-column:4 / span 2}
+.scen-field-demand{grid-column:5 / span 2}
 .scen-field-hire{grid-column:2 / span 2}
-.scen-field-ot{grid-column:7 / span 2}
+.scen-field-prod{grid-column:4}
+.scen-field-ot{grid-column:8 / span 2}
 .scen-field-label{font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.4px}
 .scen-field-inline{display:grid;grid-template-columns:minmax(0,1fr) 124px;align-items:center;gap:8px}
 .ri-unit{width:124px;font-size:12px;color:#52525b;border:1px solid #d0dce8;border-radius:8px;padding:8px 10px;background:#fff;cursor:pointer;outline:none;min-height:40px}
@@ -281,7 +282,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
   .scen-left{position:static}
   .row-inputs{grid-template-columns:repeat(2,minmax(0,1fr))}
   .row-inputs-label{grid-column:1/-1}
-  .scen-field-demand,.scen-field-hire,.scen-field-ot{grid-column:auto}
+  .scen-field-demand,.scen-field-hire,.scen-field-prod,.scen-field-ot{grid-column:auto}
 }
 @media (max-width: 640px){
   .modal-toolbar{flex-direction:column;align-items:flex-start}
@@ -291,7 +292,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
   .chart-tooltip-grid{grid-template-columns:1fr}
   .global-default-inline{grid-template-columns:1fr}
   .row-inputs{grid-template-columns:1fr}
-  .scen-col-heads,.scen-row{grid-template-columns:minmax(180px,1.3fr) repeat(7,minmax(72px,1fr))}
+  .scen-col-heads,.scen-row{grid-template-columns:minmax(180px,1.3fr) repeat(8,minmax(72px,1fr))}
   .scen-results-header{align-items:flex-start}
   .scen-field-inline{grid-template-columns:1fr}
   .ri-unit{width:100%}
@@ -484,14 +485,6 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
           </div>
 
           <div class="global-default-row">
-            <div class="global-default-label">Productivity adjustment</div>
-            <div class="global-default-inline">
-              <input id="global-prod-input" class="scen-number-input" type="number" min="-50" max="50" step="1" value="0" oninput="setGlobalField('prod', this.value)" onkeydown="handleScenarioNumberKeydown(event)">
-              <span class="global-default-note">pct pts · all labs</span>
-            </div>
-          </div>
-
-          <div class="global-default-row">
             <div class="global-default-label">Days/week change</div>
             <div class="global-default-inline">
               <input id="global-days-input" class="scen-number-input" type="number" min="-4" max="4" step="1" value="0" oninput="setGlobalField('days', this.value)" onkeydown="handleScenarioNumberKeydown(event)">
@@ -526,7 +519,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
           </div>
         </div>
         <div class="scen-col-heads">
-          <span>Lab</span><span>Techs</span><span>Avail</span>
+          <span>Lab</span><span>Techs</span><span>Avail</span><span>Prod %</span>
           <span>Demand</span><span>Capacity</span><span>Margin</span>
           <span>Load %</span><span>OT Hrs</span>
         </div>

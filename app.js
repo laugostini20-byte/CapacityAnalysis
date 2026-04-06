@@ -126,9 +126,9 @@ const st = {
     name: '',
     selectedLabs: new Set(),   // lab names in scope
     globalOt: 0,
-    globalProdAdj: 0,
+    globalProdAdj: 0,          // legacy scenario field; new UI uses per-lab productivityPct
     globalDaysDelta: 0,
-    perLab: {},                // { labName: { demandVal, demandUnit, hireTechs, otOverride, daysOverride, prodOverride } }
+    perLab: {},                // { labName: { demandVal, demandUnit, hireTechs, otOverride, daysOverride, productivityPct, prodOverride } }
   },
   modalLabName: null,
   modalMetric: 'load',
@@ -224,6 +224,19 @@ function scale(view) { return VIEW_SCALE[view] ?? 1; }
 
 function isIndySoft(labName) { return INDYSOFT_LABS.has(labName); }
 
+function createScenarioInputs(overrides = {}) {
+  return {
+    demandVal: 0,
+    demandUnit: 'weekly',
+    hireTechs: 0,
+    otOverride: null,
+    daysOverride: null,
+    productivityPct: null,
+    prodOverride: null, // legacy saved-scenario field
+    ...overrides,
+  };
+}
+
 function systemType(labName, settings) {
   if (settings?.systemType) return settings.systemType;
   return isIndySoft(labName) ? 'indysoft' : 'caltrak';
@@ -277,6 +290,17 @@ function baseMetrics(lab, viewStr) {
   return { demand, capacity, margin, loadPct, otHrs, onsite, avail, status };
 }
 
+function getScenarioProductivityPct(lab, inputs = {}, global = {}) {
+  const explicitPct = Number(inputs.productivityPct);
+  if (Number.isFinite(explicitPct)) return clamp(Math.round(explicitPct), 1, 100);
+
+  const legacyAdj = Number(inputs.prodOverride ?? global.prodAdj ?? 0);
+  if (Number.isFinite(legacyAdj) && legacyAdj !== 0) {
+    return clamp(lab.productivityPct + legacyAdj, 1, 100);
+  }
+  return clamp(lab.productivityPct, 1, 100);
+}
+
 // Scenario metrics use OT-adjusted capacity consistently for capacity, margin, load, and remaining OT.
 function scenMetrics(lab, inputs, global, viewStr) {
   const s = scale(viewStr);
@@ -284,9 +308,7 @@ function scenMetrics(lab, inputs, global, viewStr) {
   const hireTechs = inputs.hireTechs ?? 0;
   const otPerWeek = inputs.otOverride ?? global.ot;
   const daysChange = inputs.daysOverride ?? global.daysDelta;
-  const prodAdj = inputs.prodOverride ?? global.prodAdj;
-
-  const scenProdPct = Math.min(100, Math.max(1, lab.productivityPct + prodAdj));
+  const scenProdPct = getScenarioProductivityPct(lab, inputs, global);
   const hrsPerDay = SHIFT_HRS * (scenProdPct / 100);
   const baseAvail = Math.max(0, lab.totalTechs - onsiteFTE(lab.labName, viewStr));
   const scenAvail = baseAvail + hireTechs;
@@ -301,7 +323,7 @@ function scenMetrics(lab, inputs, global, viewStr) {
   const otHrs = Math.max(0, demand - effectiveCap);
   const status = getStatus(loadPct);
 
-  return { demand, capacity, effectiveCap, margin, loadPct, otHrs, status, scenTechs, scenAvail };
+  return { demand, capacity, effectiveCap, margin, loadPct, otHrs, status, scenTechs, scenAvail, scenProdPct };
 }
 
 function toWeeklyDelta(val, unit) {
@@ -1783,10 +1805,8 @@ function setScenView(v) {
 
 function syncScenarioGlobalInputs() {
   const otInput = document.getElementById('global-ot-input');
-  const prodInput = document.getElementById('global-prod-input');
   const daysInput = document.getElementById('global-days-input');
   if (otInput) otInput.value = st.scen.globalOt;
-  if (prodInput) prodInput.value = st.scen.globalProdAdj;
   if (daysInput) daysInput.value = st.scen.globalDaysDelta;
 }
 
@@ -1808,7 +1828,7 @@ function addScenLab(labName) {
   if (!labName) return;
   st.scen.selectedLabs.add(labName);
   if (!st.scen.perLab[labName]) {
-    st.scen.perLab[labName] = { demandVal: 0, demandUnit: 'weekly', hireTechs: 0, otOverride: null, daysOverride: null, prodOverride: null };
+    st.scen.perLab[labName] = createScenarioInputs();
   }
   scenLabPickerSearchTerm = '';
   const searchInput = document.getElementById('scen-lab-search');
@@ -1934,13 +1954,14 @@ function getScenGlobal() {
   return { ot: st.scen.globalOt, prodAdj: st.scen.globalProdAdj, daysDelta: st.scen.globalDaysDelta };
 }
 
-function buildScenarioSubLabel(inputs, global) {
+function buildScenarioSubLabel(lab, inputs, global, scenProdPct = getScenarioProductivityPct(lab, inputs, global)) {
   const demVal = inputs.demandVal ?? 0;
   const demUnit = inputs.demandUnit ?? 'weekly';
   const hireTechs = inputs.hireTechs ?? 0;
   const otOverrideVal = inputs.otOverride;
   return [
     hireTechs !== 0 ? `${hireTechs > 0 ? '+' : ''}${hireTechs} techs` : null,
+    scenProdPct !== lab.productivityPct ? `${fmtInt(scenProdPct)}% prod` : null,
     demVal !== 0 ? `${demVal > 0 ? '+' : ''}${demVal.toLocaleString()} ${demUnit} hrs demand` : null,
     `${otOverrideVal ?? global.ot} OT hrs/wk ${otOverrideVal == null ? '(global)' : '(override)'}`,
   ].filter(Boolean).join(' · ');
@@ -1956,7 +1977,7 @@ function updateScenarioRowBlock(lab) {
   const s = scenMetrics(lab, inputs, g, sv);
   const rc = s.status;
   const weeklyEquiv = toWeeklyDelta(inputs.demandVal ?? 0, inputs.demandUnit ?? 'weekly');
-  const subLabel = buildScenarioSubLabel(inputs, g) || 'No changes applied';
+  const subLabel = buildScenarioSubLabel(lab, inputs, g, s.scenProdPct) || 'No changes applied';
   const otOverrideVal = inputs.otOverride;
 
   const resultRow = block.querySelector('.row-result');
@@ -1973,6 +1994,7 @@ function updateScenarioRowBlock(lab) {
   };
   setText('.scen-result-techs', fmtInt(s.scenTechs));
   setText('.scen-result-avail', fmt(s.scenAvail, 1));
+  setText('.scen-result-prod', `${fmtInt(s.scenProdPct)}%`);
   setText('.scen-result-demand', fmtInt(s.demand));
   setText('.scen-result-capacity', fmtInt(s.effectiveCap));
   setText('.scen-result-margin', fmtSgn(s.margin, 0));
@@ -1990,6 +2012,8 @@ function updateScenarioRowBlock(lab) {
   if (otInput) otInput.placeholder = `Use global (${g.ot})`;
   const otHint = block.querySelector('.scen-ot-hint');
   if (otHint) otHint.textContent = otOverrideVal == null ? `Using global default: ${g.ot}` : 'Blank resets to global';
+  const prodInput = block.querySelector('.scen-prod-input');
+  if (prodInput && document.activeElement !== prodInput) prodInput.value = Math.round(s.scenProdPct);
 
   const equivEl = block.querySelector('.ri-equiv');
   if (equivEl) {
@@ -2067,15 +2091,18 @@ function renderScenRows() {
     const hireTechs = inputs.hireTechs ?? 0;
 
     const otOverrideVal = inputs.otOverride;
+    const baselineProdPct = clamp(Math.round(lab.productivityPct), 1, 100);
+    const scenProdPct = Math.round(s.scenProdPct);
     const labNameEsc = esc(lab.labName);
     const labNameShort = esc(lab.labName.length > 18 ? `${lab.labName.slice(0, 18)}…` : lab.labName);
     const encodedLabName = encodeURIComponent(lab.labName);
-    const subLabel = buildScenarioSubLabel(inputs, g);
+    const subLabel = buildScenarioSubLabel(lab, inputs, g, s.scenProdPct);
 
     return `<div class="scen-lab-block" data-scen-lab="${encodedLabName}">
       <div class="scen-row row-baseline s-${sc}">
         <div><div class="scen-row-label" style="font-weight:600">${labNameEsc}</div><div class="scen-row-sublabel">Baseline · current</div></div>
         <span>${fmtInt(lab.totalTechs)}</span><span>${fmt(b.avail, 1)}</span>
+        <span class="scen-base-prod">${baselineProdPct}%</span>
         <span>${fmtInt(b.demand)}</span><span>${fmtInt(b.capacity)}</span>
         <span class="${b.margin >= 0 ? 'margin-pos' : 'margin-neg'}">${fmtSgn(b.margin,0)}</span>
         <span class="${'load-' + sc}">${fmt(b.loadPct,1)}%</span>
@@ -2088,6 +2115,12 @@ function renderScenRows() {
         <label class="scen-field scen-field-hire">
           <span class="scen-field-label">Hire techs</span>
           <input class="scen-number-input" type="number" step="1" value="${hireTechs}" oninput="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'hireTechs',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+        </label>
+
+        <label class="scen-field scen-field-prod">
+          <span class="scen-field-label">Productivity</span>
+          <input class="scen-number-input scen-prod-input" type="number" min="1" max="100" step="1" value="${scenProdPct}" oninput="setPerLabProductivity(decodeURIComponent('${encodedLabName}'),this.value)" onblur="syncPerLabProductivityInput(decodeURIComponent('${encodedLabName}'),this)" onkeydown="handleScenarioNumberKeydown(event)">
+          <span class="scen-field-hint">Defaults to current: ${baselineProdPct}%</span>
         </label>
 
         <label class="scen-field scen-field-demand">
@@ -2117,6 +2150,7 @@ function renderScenRows() {
         </div>
         <span class="scen-result-techs" style="font-weight:600">${fmtInt(s.scenTechs)}</span>
         <span class="scen-result-avail" style="font-weight:600">${fmt(s.scenAvail,1)}</span>
+        <span class="scen-result-prod" style="font-weight:600">${scenProdPct}%</span>
         <span class="scen-result-demand">${fmtInt(s.demand)}</span>
         <span class="scen-result-capacity">${fmtInt(s.effectiveCap)}</span>
         <span class="scen-result-margin ${s.margin >= 0 ? 'margin-pos' : 'margin-neg'}">${fmtSgn(s.margin,0)}</span>
@@ -2129,7 +2163,7 @@ function renderScenRows() {
 
 function getOrInitPerLab(labName) {
   if (!st.scen.perLab[labName]) {
-    st.scen.perLab[labName] = { demandVal: 0, demandUnit: 'weekly', hireTechs: 0, otOverride: null, daysOverride: null, prodOverride: null };
+    st.scen.perLab[labName] = createScenarioInputs();
   }
   return st.scen.perLab[labName];
 }
@@ -2165,6 +2199,26 @@ function setPerLabOt(labName, rawValue) {
     p.otOverride = Math.max(0, Math.round(n));
   }
   refreshScenarioComputedOutputs();
+}
+
+function setPerLabProductivity(labName, rawValue) {
+  const p = getOrInitPerLab(labName);
+  const raw = String(rawValue ?? '').trim();
+  if (!raw) {
+    p.productivityPct = null;
+  } else {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    p.productivityPct = clamp(Math.round(n), 1, 100);
+  }
+  refreshScenarioComputedOutputs();
+}
+
+function syncPerLabProductivityInput(labName, inputEl) {
+  const lab = st.labList.find(item => item.labName === labName);
+  if (!lab || !inputEl) return;
+  const inputs = getOrInitPerLab(labName);
+  inputEl.value = Math.round(getScenarioProductivityPct(lab, inputs, getScenGlobal()));
 }
 
 async function saveCurrentScenario() {
@@ -2209,8 +2263,17 @@ function loadSavedScenario(id) {
   st.scen.globalDaysDelta = c.globalDaysDelta ?? 0;
   st.scen.perLab = c.perLab ?? {};
   st.scen.view = c.scenView ?? 'weekly';
-  // Init any missing perLab entries
-  st.scen.selectedLabs.forEach(n => { if (!st.scen.perLab[n]) st.scen.perLab[n] = { demandVal:0, demandUnit:'weekly', hireTechs:0, otOverride:null, daysOverride:null, prodOverride:null }; });
+  const legacyGlobal = { ot: st.scen.globalOt, prodAdj: st.scen.globalProdAdj, daysDelta: st.scen.globalDaysDelta };
+  st.scen.selectedLabs.forEach(labName => {
+    const existing = createScenarioInputs(st.scen.perLab[labName]);
+    const lab = st.labList.find(item => item.labName === labName);
+    if (lab && existing.productivityPct == null && (existing.prodOverride != null || Number(legacyGlobal.prodAdj) !== 0)) {
+      existing.productivityPct = getScenarioProductivityPct(lab, existing, legacyGlobal);
+    }
+    existing.prodOverride = null;
+    st.scen.perLab[labName] = existing;
+  });
+  st.scen.globalProdAdj = 0;
   if (document.getElementById('scen-name')) document.getElementById('scen-name').value = st.scen.name;
   syncScenarioGlobalInputs();
   renderScenLabPicker();
