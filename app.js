@@ -291,8 +291,11 @@ function baseMetrics(lab, viewStr) {
 }
 
 function getScenarioProductivityPct(lab, inputs = {}, global = {}) {
-  const explicitPct = Number(inputs.productivityPct);
-  if (Number.isFinite(explicitPct)) return clamp(Math.round(explicitPct), 1, 100);
+  const rawExplicitPct = inputs.productivityPct;
+  if (rawExplicitPct != null && String(rawExplicitPct).trim() !== '') {
+    const explicitPct = Number(rawExplicitPct);
+    if (Number.isFinite(explicitPct)) return clamp(Math.round(explicitPct), 1, 100);
+  }
 
   const legacyAdj = Number(inputs.prodOverride ?? global.prodAdj ?? 0);
   if (Number.isFinite(legacyAdj) && legacyAdj !== 0) {
