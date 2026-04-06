@@ -1398,7 +1398,25 @@ function buildProjectedMonthlySnapshot(lab, monthKey, demandOverride = null) {
   return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
 }
 
+function buildStatusBoardMonthlySnapshot(lab, monthKey) {
+  const currentMonthKey = monthKeyFromDate(referenceDate());
+  if (monthKey !== currentMonthKey) return null;
+  const metrics = baseMetrics(lab, 'monthly');
+  return {
+    monthKey,
+    demand: metrics.demand,
+    capacity: metrics.capacity,
+    load: metrics.loadPct,
+    ot: metrics.otHrs,
+    techs: lab.totalTechs,
+    onsite: metrics.onsite,
+    avail: metrics.avail,
+  };
+}
+
 function buildCurrentYearMonthlySnapshot(lab, monthKey) {
+  const currentPeriodSnapshot = buildStatusBoardMonthlySnapshot(lab, monthKey);
+  if (currentPeriodSnapshot) return currentPeriodSnapshot;
   const historicalDemand = getHistoricalWipForMonth(lab.labName, monthKey, toISODate(referenceDate()));
   return buildProjectedMonthlySnapshot(lab, monthKey, historicalDemand);
 }
