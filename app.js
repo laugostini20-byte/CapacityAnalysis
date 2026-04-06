@@ -370,7 +370,7 @@ function historicalLabLookupKeys(labName) {
   ].filter(Boolean))];
 }
 
-function getHistoricalWipForMonth(labName, monthKey) {
+function getHistoricalWipForMonth(labName, monthKey, throughDate = null) {
   const { daily, dates } = getHistoricalWipSource();
   if (!dates.length) return null;
   const monthPrefix = `${monthKey}-`;
@@ -379,6 +379,7 @@ function getHistoricalWipForMonth(labName, monthKey) {
   let count = 0;
   for (const dateStr of dates) {
     if (!dateStr.startsWith(monthPrefix)) continue;
+    if (throughDate && dateStr > throughDate) continue;
     const labs = daily[dateStr] || {};
     for (const key of lookupKeys) {
       const raw = labs[key];
@@ -1417,10 +1418,11 @@ function buildHistoricalMonthlySnapshot(lab, monthKey) {
   return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
 }
 
-function buildLiveMonthlySnapshot(lab, monthKey) {
+function buildProjectedMonthlySnapshot(lab, monthKey, demandOverride = null) {
   const range = monthRangeFromKey(monthKey);
   if (!range) return buildEmptyMonthlySnapshot(monthKey);
-  const demand = getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH;
+  const projectedDemand = getStdHoursForDate(lab, range.refDate) * WEEKS_PER_MONTH;
+  const demand = demandOverride != null && Number.isFinite(demandOverride) ? demandOverride : projectedDemand;
   const techs = getChartHeadcountForDate(lab.labName, range.refDate) ?? lab.totalTechs;
   const periodWorkDays = Math.max(1, lab.daysPerWeek * WEEKS_PER_MONTH);
   const onsite = onsiteTechDaysForRange(lab.labName, range.startDate, range.endDate) / periodWorkDays;
@@ -1431,13 +1433,20 @@ function buildLiveMonthlySnapshot(lab, monthKey) {
   return {monthKey, demand, capacity, load, ot, techs, onsite, avail};
 }
 
-function buildYearMonthlySnapshots(lab, year, truncateAfterIndex = null, source = 'live') {
+function buildCurrentYearMonthlySnapshot(lab, monthKey) {
+  // For the current year, show actual historical WIP where it exists and
+  // fall back to projected std hours only for months not yet in the workbook.
+  const historicalDemand = getHistoricalWipForMonth(lab.labName, monthKey, toISODate(referenceDate()));
+  return buildProjectedMonthlySnapshot(lab, monthKey, historicalDemand);
+}
+
+function buildYearMonthlySnapshots(lab, year, truncateAfterIndex = null, source = 'projected') {
   return CAL_MONTH_SUFFIXES.map((_, idx) => {
     const monthKey = monthKeyForYearIndex(year, idx);
     if (truncateAfterIndex != null && idx > truncateAfterIndex) return buildEmptyMonthlySnapshot(monthKey);
-    return source === 'historical'
-      ? buildHistoricalMonthlySnapshot(lab, monthKey)
-      : buildLiveMonthlySnapshot(lab, monthKey);
+    if (source === 'historical') return buildHistoricalMonthlySnapshot(lab, monthKey);
+    if (source === 'current-year') return buildCurrentYearMonthlySnapshot(lab, monthKey);
+    return buildProjectedMonthlySnapshot(lab, monthKey);
   });
 }
 
@@ -1477,7 +1486,7 @@ function buildLabChart(lab) {
   const currentMonthIdx = calendarMonthIndexFromDate(referenceDate());
 
   const thisSnapshots = buildYearMonthlySnapshots(lab, baselineYear, null, 'historical');
-  const prevSnapshots = buildYearMonthlySnapshots(lab, currentYear, currentMonthIdx, 'live');
+  const prevSnapshots = buildYearMonthlySnapshots(lab, currentYear, currentMonthIdx, 'current-year');
   const sanitize = v => (v != null && Number.isFinite(v) ? v : null);
   const thisValues = thisSnapshots.map(s => sanitize(getMetricValue(s, metric)));
   const prevValues = prevSnapshots.map(s => sanitize(getMetricValue(s, metric)));
