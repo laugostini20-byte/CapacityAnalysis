@@ -176,52 +176,63 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .stat-sub{font-size:10px;color:#a1a1aa;margin-top:1px}
 
 /* SCENARIO PLANNER */
-#view-scenario-planner .scen-layout{display:grid;grid-template-columns:256px 1fr;gap:14px;align-items:start}
-.scen-left{background:#fff;border:1px solid #e4e4e7;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:64px}
-.scen-section-label{font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.scen-right{display:flex;flex-direction:column;gap:12px}
-.scen-input{width:100%;border:1px solid #e4e4e7;border-radius:6px;padding:6px 9px;font-size:12px;color:#18181b;background:#fff;outline:none}
-.scen-input:focus{border-color:#a1a1aa}
-.scen-btn{border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:500;cursor:pointer}
+#view-scenario-planner .scen-layout{display:grid;grid-template-columns:minmax(300px,340px) minmax(0,1fr);gap:18px;align-items:start}
+.scen-left{background:#fff;border:1px solid #d0dce8;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:16px;position:sticky;top:68px;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
+.scen-section-label{font-size:11px;font-weight:700;color:#6b7a90;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.scen-divider{height:1px;background:#e4e4e7}
+.scen-right{display:flex;flex-direction:column;gap:14px}
+.scen-input{width:100%;border:1px solid #d0dce8;border-radius:8px;padding:10px 12px;font-size:13px;color:#18181b;background:#fff;outline:none}
+.scen-input:focus{border-color:#00539b;box-shadow:0 0 0 3px rgba(0,83,155,.12)}
+.scen-btn{border:none;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer}
 .scen-btn-primary{background:#18181b;color:#fff}
-.scen-btn-ghost{background:none;border:1px solid #e4e4e7;color:#52525b}
-.scen-btn-ghost:hover{background:#f4f4f5}
-.global-default-row{display:flex;flex-direction:column;gap:4px}
-.global-default-label{font-size:11px;font-weight:500;color:#3f3f46}
-.stepper{display:inline-flex;align-items:center;border:1px solid #e4e4e7;border-radius:6px;overflow:hidden;background:#fff}
-.step-btn{background:none;border:none;padding:4px 9px;cursor:pointer;color:#71717a;font-size:14px;line-height:1}
-.step-btn:hover{background:#f4f4f5;color:#18181b}
-.step-val{padding:4px 10px;font-size:12px;font-weight:600;color:#18181b;min-width:38px;text-align:center;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7}
-.step-val.is-global{color:#a1a1aa;font-style:italic;font-weight:400}
-.lab-tags{display:flex;flex-wrap:wrap;gap:4px;min-height:22px}
-.lab-tag{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:10px;padding:2px 8px;font-size:11px;display:inline-flex;align-items:center;gap:4px}
-.lab-tag-x{cursor:pointer;opacity:.6;font-size:13px;line-height:1}
+.scen-btn-primary:hover{background:#0f172a}
+.scen-btn-ghost{background:#fff;border:1px solid #d0dce8;color:#52525b}
+.scen-btn-ghost:hover{background:#f8fafc;border-color:#94a3b8}
+.scen-lab-select{width:100%;border:1px solid #d0dce8;border-radius:8px;padding:10px 12px;font-size:13px;color:#18181b;background:#fff;outline:none;cursor:pointer}
+.scen-lab-select:focus{border-color:#00539b;box-shadow:0 0 0 3px rgba(0,83,155,.12)}
+.global-default-grid{display:grid;gap:12px}
+.global-default-row{display:flex;flex-direction:column;gap:6px}
+.global-default-label{font-size:12px;font-weight:600;color:#3f3f46}
+.global-default-inline{display:grid;grid-template-columns:minmax(0,136px) auto;align-items:center;gap:10px}
+.global-default-note{font-size:11px;color:#a1a1aa}
+.scen-number-input{width:100%;min-height:40px;border:1px solid #d0dce8;border-radius:8px;padding:8px 10px;font-size:14px;font-variant-numeric:tabular-nums;color:#18181b;background:#fff;outline:none}
+.scen-number-input:focus{border-color:#00539b;box-shadow:0 0 0 3px rgba(0,83,155,.12)}
+.lab-tags{display:flex;flex-wrap:wrap;gap:6px;min-height:28px}
+.lab-tag{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.lab-tag-x{cursor:pointer;opacity:.6;font-size:14px;line-height:1}
 .lab-tag-x:hover{opacity:1}
-.scen-lab-select{width:100%;border:1px solid #e4e4e7;border-radius:6px;padding:6px 9px;font-size:12px;color:#52525b;background:#fff;outline:none;cursor:pointer}
+.scen-lab-search{position:relative}
+.scen-lab-search-input{padding-right:36px}
+.scen-lab-search-icon{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:13px;color:#94a3b8;pointer-events:none}
+.scen-lab-search-menu{position:absolute;top:calc(100% + 8px);left:0;right:0;background:#fff;border:1px solid #d0dce8;border-radius:10px;box-shadow:0 10px 30px rgba(0,35,66,.14);z-index:40;overflow:hidden;max-height:280px;overflow-y:auto}
+.scen-lab-option{display:block;width:100%;border:none;border-bottom:1px solid #eef2f7;background:#fff;color:#18181b;padding:10px 12px;font-size:13px;text-align:left;cursor:pointer}
+.scen-lab-option:last-child{border-bottom:none}
+.scen-lab-option:hover{background:#eff6ff;color:#00539b}
+.scen-lab-empty{padding:12px;font-size:12px;color:#94a3b8}
 
 /* IMPACT CARDS */
-.impact-cards-wrap{background:#fff;border:1px solid #e4e4e7;border-radius:8px;padding:12px 16px}
-.impact-cards-title{font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.impact-cards-wrap{background:#fff;border:1px solid #d0dce8;border-radius:14px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
+.impact-cards-title{font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
 .impact-cards-list{display:flex;flex-wrap:wrap;gap:8px}
-.impact-card{background:#fafafa;border:1px solid #e4e4e7;border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:8px;flex:1;min-width:240px}
-.impact-lab{font-weight:600;font-size:12px;color:#18181b;min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.impact-card{background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex:1;min-width:280px}
+.impact-lab{font-weight:700;font-size:13px;color:#18181b;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .impact-arrow{color:#d1d5db;font-size:11px}
 .impact-ot{margin-left:auto;padding-left:10px;border-left:1px solid #e4e4e7;white-space:nowrap;text-align:right}
-.impact-ot-label{font-size:9px;color:#71717a}
-.impact-ot-val{font-size:11px;font-weight:600;color:#52525b}
+.impact-ot-label{font-size:10px;color:#71717a}
+.impact-ot-val{font-size:12px;font-weight:700;color:#52525b}
 
 /* SCENARIO RESULTS TABLE */
-.scen-results-wrap{background:#fff;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden}
-.scen-results-header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #e4e4e7;background:#fafafa}
-.scen-col-heads{display:grid;grid-template-columns:2fr .5fr .5fr .75fr .75fr .65fr .65fr .6fr;gap:8px;padding:6px 12px;background:#fafafa;border-bottom:1px solid #e4e4e7;font-size:10px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:.4px}
+.scen-results-wrap{background:#fff;border:1px solid #d0dce8;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,35,66,.08),0 4px 16px rgba(0,35,66,.05)}
+.scen-results-header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #e4e4e7;background:#fafafa;flex-wrap:wrap}
+.scen-col-heads{display:grid;grid-template-columns:minmax(220px,2.25fr) repeat(7,minmax(84px,.8fr));gap:10px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #e4e4e7;font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.4px}
 .scen-col-heads span:not(:first-child){text-align:right}
 .scen-lab-block{border-top:1px solid #e4e4e7}
 .scen-lab-block:first-child{border-top:none}
-.scen-row{display:grid;grid-template-columns:2fr .5fr .5fr .75fr .75fr .65fr .65fr .6fr;gap:8px;padding:8px 12px;align-items:center;font-size:12px}
+.scen-row{display:grid;grid-template-columns:minmax(220px,2.25fr) repeat(7,minmax(84px,.8fr));gap:10px;padding:10px 16px;align-items:center;font-size:13px}
 .scen-row > span{font-variant-numeric:tabular-nums}
 .scen-row > span:not(:first-child){text-align:right}
 .scen-row-label{line-height:1.2}
-.scen-row-sublabel{font-size:10px;color:#a1a1aa;margin-top:1px}
+.scen-row-sublabel{font-size:11px;color:#a1a1aa;margin-top:3px}
 .row-baseline{border-left:3px solid #e4e4e7}
 .row-baseline.s-over{background:#fef2f2;border-left-color:#ef4444}
 .row-baseline.s-risk{background:#fffbeb;border-left-color:#f59e0b}
@@ -230,13 +241,15 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .row-result.s-over{background:#fef2f2;border-left-color:#ef4444}
 .row-result.s-risk{background:#fffbeb;border-left-color:#f59e0b}
 .row-result.s-ok{background:#f0fdf4;border-left-color:#16a34a}
-.row-inputs{background:#f8fafc;border-top:1px solid #e4e4e7;border-left:3px solid #d1d5db;padding:7px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.ri-label{font-size:9px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
-.ri-chip{display:flex;align-items:center;gap:3px}
-.ri-chip-label{font-size:9px;color:#71717a;white-space:nowrap}
-.ri-unit{font-size:9px;color:#52525b;border:1px solid #e4e4e7;border-radius:4px;padding:2px 4px;background:#fff;cursor:pointer;outline:none}
-.ri-equiv{font-size:9px;color:#2563eb;white-space:nowrap}
-.ri-sep{width:1px;height:16px;background:#e4e4e7;flex-shrink:0}
+.row-inputs{background:#f8fafc;border-top:1px solid #e4e4e7;border-left:3px solid #d1d5db;padding:12px 16px;display:grid;grid-template-columns:minmax(108px,.8fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:12px 14px;align-items:end}
+.row-inputs-label{font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;align-self:center}
+.scen-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.scen-field-label{font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.4px}
+.scen-field-inline{display:flex;align-items:center;gap:8px}
+.ri-unit{font-size:12px;color:#52525b;border:1px solid #d0dce8;border-radius:8px;padding:8px 10px;background:#fff;cursor:pointer;outline:none;min-height:40px}
+.ri-unit:focus{border-color:#00539b}
+.ri-equiv{font-size:11px;color:#2563eb;white-space:nowrap}
+.scen-field-hint{font-size:11px;color:#94a3b8}
 
 /* UPLOAD MODAL */
 .upload-modal-box{max-width:520px}
@@ -261,6 +274,10 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
 .header-help-tip.show{opacity:1;transform:translateY(0)}
 @media (max-width: 900px){
   .modal-insight-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}
+  #view-scenario-planner .scen-layout{grid-template-columns:1fr}
+  .scen-left{position:static}
+  .row-inputs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .row-inputs-label{grid-column:1/-1}
 }
 @media (max-width: 640px){
   .modal-toolbar{flex-direction:column;align-items:flex-start}
@@ -268,6 +285,10 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
   .modal-metric-btn{flex:1;text-align:center}
   .chart-tooltip{min-width:0}
   .chart-tooltip-grid{grid-template-columns:1fr}
+  .global-default-inline{grid-template-columns:1fr}
+  .row-inputs{grid-template-columns:1fr}
+  .scen-col-heads,.scen-row{grid-template-columns:minmax(180px,1.3fr) repeat(7,minmax(72px,1fr))}
+  .scen-results-header{align-items:flex-start}
 }
 </style>
 </head>
@@ -423,52 +444,52 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
         </div>
       </div>
 
-      <div style="height:1px;background:#e4e4e7"></div>
+      <div class="scen-divider"></div>
 
       <div>
         <div class="scen-section-label">Labs in scope</div>
-        <select id="scen-lab-picker" class="scen-lab-select" onchange="addScenLab(this.value)">
-          <option value="">Add a lab…</option>
-        </select>
+        <div class="scen-lab-search" id="scen-lab-search-shell">
+          <input
+            id="scen-lab-search"
+            class="scen-input scen-lab-search-input"
+            placeholder="Search labs to add..."
+            autocomplete="off"
+            onfocus="openScenLabPicker()"
+            oninput="onScenLabSearchInput(this.value)"
+            onkeydown="handleScenLabSearchKeydown(event)">
+          <span class="scen-lab-search-icon">⌕</span>
+          <div id="scen-lab-search-menu" class="scen-lab-search-menu" hidden></div>
+        </div>
         <div id="scen-lab-tags" class="lab-tags" style="margin-top:8px"></div>
       </div>
 
-      <div style="height:1px;background:#e4e4e7"></div>
+      <div class="scen-divider"></div>
 
       <div>
         <div class="scen-section-label">Global defaults</div>
-        <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="global-default-grid">
 
           <div class="global-default-row">
             <div class="global-default-label">OT authorized (hrs/week)</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div class="stepper">
-                <button class="step-btn" onclick="adjustGlobal('ot',-10)">−</button>
-                <div class="step-val" id="global-ot-val">0</div>
-                <button class="step-btn" onclick="adjustGlobal('ot',10)">+</button>
-              </div>
-              <span style="font-size:11px;color:#a1a1aa">scales with view</span>
+            <div class="global-default-inline">
+              <input id="global-ot-input" class="scen-number-input" type="number" min="0" step="10" value="0" oninput="setGlobalField('ot', this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+              <span class="global-default-note">scales with view</span>
             </div>
           </div>
 
           <div class="global-default-row">
             <div class="global-default-label">Productivity adjustment</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div class="stepper">
-                <button class="step-btn" onclick="adjustGlobal('prod',-5)">−</button>
-                <div class="step-val" id="global-prod-val">0%</div>
-                <button class="step-btn" onclick="adjustGlobal('prod',5)">+</button>
-              </div>
-              <span style="font-size:11px;color:#a1a1aa">pct pts · all labs</span>
+            <div class="global-default-inline">
+              <input id="global-prod-input" class="scen-number-input" type="number" min="-50" max="50" step="1" value="0" oninput="setGlobalField('prod', this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+              <span class="global-default-note">pct pts · all labs</span>
             </div>
           </div>
 
           <div class="global-default-row">
             <div class="global-default-label">Days/week change</div>
-            <div class="stepper">
-              <button class="step-btn" onclick="adjustGlobal('days',-1)">−</button>
-              <div class="step-val" id="global-days-val">0</div>
-              <button class="step-btn" onclick="adjustGlobal('days',1)">+</button>
+            <div class="global-default-inline">
+              <input id="global-days-input" class="scen-number-input" type="number" min="-4" max="4" step="1" value="0" oninput="setGlobalField('days', this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+              <span class="global-default-note">days applied to each selected lab</span>
             </div>
           </div>
 

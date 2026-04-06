@@ -139,7 +139,9 @@ const st = {
 
 let labPickerInitialized = false;
 let labPickerSearchTerm = '';
+let scenLabPickerSearchTerm = '';
 let headerHelpTipEl = null;
+let scenResultsRenderTimer = null;
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 function labKey(name) {
@@ -213,6 +215,10 @@ function fmtSgn(n, dec = 1) {
   if (n == null || !Number.isFinite(n)) return '—';
   const s = fmt(Math.abs(n), dec);
   return n >= 0 ? '+' + s : '−' + s;
+}
+
+function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n));
 }
 
 function scale(view) { return VIEW_SCALE[view] ?? 1; }
@@ -902,8 +908,10 @@ function closeLabPickerMenu() {
 
 function handleDocumentClickForLabPicker(e) {
   const picker = document.getElementById('lab-picker');
-  if (!picker) return;
-  if (!picker.contains(e.target)) closeLabPickerMenu();
+  if (picker && !picker.contains(e.target)) closeLabPickerMenu();
+
+  const scenPicker = document.getElementById('scen-lab-search-shell');
+  if (scenPicker && !scenPicker.contains(e.target)) closeScenLabPicker();
 }
 
 // ─── WEEK NAVIGATION ─────────────────────────────────────────────────────────
@@ -1749,17 +1757,26 @@ function setScenView(v) {
   renderScenarioResults();
 }
 
-function adjustGlobal(field, delta) {
+function syncScenarioGlobalInputs() {
+  const otInput = document.getElementById('global-ot-input');
+  const prodInput = document.getElementById('global-prod-input');
+  const daysInput = document.getElementById('global-days-input');
+  if (otInput) otInput.value = st.scen.globalOt;
+  if (prodInput) prodInput.value = st.scen.globalProdAdj;
+  if (daysInput) daysInput.value = st.scen.globalDaysDelta;
+}
+
+function setGlobalField(field, rawValue) {
+  const n = Number(rawValue);
+  if (!Number.isFinite(n)) return;
   if (field === 'ot') {
-    st.scen.globalOt = Math.max(0, st.scen.globalOt + delta);
-    document.getElementById('global-ot-val').textContent = st.scen.globalOt;
+    st.scen.globalOt = Math.max(0, Math.round(n));
   } else if (field === 'prod') {
-    st.scen.globalProdAdj = Math.max(-50, Math.min(50, st.scen.globalProdAdj + delta));
-    document.getElementById('global-prod-val').textContent = st.scen.globalProdAdj + '%';
+    st.scen.globalProdAdj = clamp(Math.round(n), -50, 50);
   } else if (field === 'days') {
-    st.scen.globalDaysDelta = Math.max(-4, Math.min(4, st.scen.globalDaysDelta + delta));
-    document.getElementById('global-days-val').textContent = st.scen.globalDaysDelta;
+    st.scen.globalDaysDelta = clamp(Math.round(n), -4, 4);
   }
+  syncScenarioGlobalInputs();
   renderScenarioResults();
 }
 
@@ -1769,13 +1786,20 @@ function addScenLab(labName) {
   if (!st.scen.perLab[labName]) {
     st.scen.perLab[labName] = { demandVal: 0, demandUnit: 'weekly', hireTechs: 0, otOverride: null, daysOverride: null, prodOverride: null };
   }
-  document.getElementById('scen-lab-picker').value = '';
+  scenLabPickerSearchTerm = '';
+  const searchInput = document.getElementById('scen-lab-search');
+  if (searchInput) {
+    searchInput.value = '';
+    searchInput.focus();
+  }
+  renderScenLabPicker();
   renderScenLabTags();
   renderScenarioResults();
 }
 
 function removeScenLab(labName) {
   st.scen.selectedLabs.delete(labName);
+  renderScenLabPicker();
   renderScenLabTags();
   renderScenarioResults();
 }
@@ -1783,25 +1807,94 @@ function removeScenLab(labName) {
 function renderScenLabTags() {
   const container = document.getElementById('scen-lab-tags');
   if (!container) return;
-  container.innerHTML = [...st.scen.selectedLabs].map(name =>
-    `<span class="lab-tag">${esc(name)}<span class="lab-tag-x" onclick="removeScenLab('${esc(name)}')">×</span></span>`
-  ).join('');
+  container.innerHTML = [...st.scen.selectedLabs].map(name => {
+    const encodedName = encodeURIComponent(name);
+    return `<span class="lab-tag">${esc(name)}<span class="lab-tag-x" onclick="removeScenLab(decodeURIComponent('${encodedName}'))">×</span></span>`;
+  }).join('');
 
   const title = document.getElementById('impact-cards-title');
   if (title) title.textContent = `Scenario impact · ${st.scen.selectedLabs.size} lab${st.scen.selectedLabs.size === 1 ? '' : 's'}`;
 }
 
-function populateScenLabPicker() {
-  const picker = document.getElementById('scen-lab-picker');
-  if (!picker) return;
-  picker.innerHTML = '<option value="">Add a lab…</option>' +
-    st.labList.map(l => `<option value="${esc(l.labName)}">${esc(l.labName)}</option>`).join('');
+function availableScenLabNames() {
+  return [...new Set(st.labList.map(l => l.labName))]
+    .filter(name => !st.scen.selectedLabs.has(name))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function filteredScenLabNames() {
+  const searchKey = labKey(scenLabPickerSearchTerm);
+  return availableScenLabNames().filter(name => !searchKey || labKey(name).includes(searchKey));
+}
+
+function renderScenLabPicker() {
+  const menu = document.getElementById('scen-lab-search-menu');
+  const input = document.getElementById('scen-lab-search');
+  if (!menu || !input) return;
+
+  if (input.value !== scenLabPickerSearchTerm) input.value = scenLabPickerSearchTerm;
+
+  const available = availableScenLabNames();
+  const filtered = filteredScenLabNames();
+
+  if (!available.length) {
+    menu.innerHTML = '<div class="scen-lab-empty">All available labs are already in scope.</div>';
+    return;
+  }
+  if (!filtered.length) {
+    menu.innerHTML = '<div class="scen-lab-empty">No labs match your search.</div>';
+    return;
+  }
+
+  menu.innerHTML = filtered
+    .map(name => {
+      const encodedName = encodeURIComponent(name);
+      return `<button type="button" class="scen-lab-option" onclick="selectScenLab(decodeURIComponent('${encodedName}'))">${esc(name)}</button>`;
+    })
+    .join('');
+}
+
+function openScenLabPicker() {
+  const menu = document.getElementById('scen-lab-search-menu');
+  if (!menu) return;
+  menu.removeAttribute('hidden');
+  renderScenLabPicker();
+}
+
+function closeScenLabPicker() {
+  const menu = document.getElementById('scen-lab-search-menu');
+  if (!menu) return;
+  menu.setAttribute('hidden', '');
+}
+
+function onScenLabSearchInput(value) {
+  scenLabPickerSearchTerm = value || '';
+  openScenLabPicker();
+}
+
+function handleScenLabSearchKeydown(e) {
+  if (e.key === 'Escape') {
+    closeScenLabPicker();
+    return;
+  }
+  if (e.key !== 'Enter') return;
+  const filtered = filteredScenLabNames();
+  const exactMatch = filtered.find(name => labKey(name) === labKey(scenLabPickerSearchTerm));
+  const choice = exactMatch || (filtered.length === 1 ? filtered[0] : null);
+  if (!choice) return;
+  e.preventDefault();
+  selectScenLab(choice);
+}
+
+function selectScenLab(labName) {
+  addScenLab(labName);
 }
 
 function renderScenarioPlanner() {
-  populateScenLabPicker();
+  renderScenLabPicker();
+  syncScenarioGlobalInputs();
   renderScenLabTags();
-  renderScenarioResults();
+  setScenView(st.scen.view);
   renderScenarioDropdown();
 }
 
@@ -1810,6 +1903,7 @@ function renderScenarioDropdown() {
   if (!sel) return;
   sel.innerHTML = '<option value="">Saved scenarios…</option>' +
     st.savedScenarios.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  sel.value = st.scen.id ?? '';
 }
 
 function getScenGlobal() {
@@ -1872,8 +1966,9 @@ function renderScenRows() {
     const hireTechs = inputs.hireTechs ?? 0;
 
     const otOverrideVal = inputs.otOverride;
-    const daysOverrideVal = inputs.daysOverride;
-    const lname = esc(lab.labName);
+    const labNameEsc = esc(lab.labName);
+    const labNameShort = esc(lab.labName.length > 18 ? `${lab.labName.slice(0, 18)}…` : lab.labName);
+    const encodedLabName = encodeURIComponent(lab.labName);
 
     const subLabel = [
       hireTechs !== 0 ? `${hireTechs > 0 ? '+' : ''}${hireTechs} techs` : null,
@@ -1883,7 +1978,7 @@ function renderScenRows() {
 
     return `<div class="scen-lab-block">
       <div class="scen-row row-baseline s-${sc}">
-        <div><div class="scen-row-label" style="font-weight:600">${lname}</div><div class="scen-row-sublabel">Baseline · current</div></div>
+        <div><div class="scen-row-label" style="font-weight:600">${labNameEsc}</div><div class="scen-row-sublabel">Baseline · current</div></div>
         <span>${lab.totalTechs}</span><span>${fmt(baseMetrics(lab, st.scen.view).avail, 1)}</span>
         <span>${fmtInt(b.demand)}</span><span>${fmtInt(b.capacity)}</span>
         <span class="${b.margin >= 0 ? 'margin-pos' : 'margin-neg'}">${fmtSgn(b.margin,0)}</span>
@@ -1892,44 +1987,31 @@ function renderScenRows() {
       </div>
 
       <div class="row-inputs">
-        <span class="ri-label">${lname.substring(0,12)}…</span>
+        <div class="row-inputs-label">${labNameShort}</div>
 
-        <span class="ri-chip">
-          <span class="ri-chip-label">Demand</span>
-          <div class="stepper" style="zoom:.9">
-            <button class="step-btn" onclick="adjustPerLab('${lname}','demandVal',-${demUnit==='annual'?1000:demUnit==='monthly'?100:10})">−</button>
-            <div class="step-val">${demVal >= 0 ? '+' : ''}${demVal.toLocaleString()}</div>
-            <button class="step-btn" onclick="adjustPerLab('${lname}','demandVal',${demUnit==='annual'?1000:demUnit==='monthly'?100:10})">+</button>
-          </div>
-          <select class="ri-unit" onchange="setPerLabUnit('${lname}',this.value)">
+        <label class="scen-field">
+          <span class="scen-field-label">Demand delta</span>
+          <div class="scen-field-inline">
+            <input class="scen-number-input" type="number" step="1" value="${demVal}" onchange="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'demandVal',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+            <select class="ri-unit" onchange="setPerLabUnit(decodeURIComponent('${encodedLabName}'),this.value)">
             <option value="weekly" ${demUnit==='weekly'?'selected':''}>wk hrs</option>
             <option value="monthly" ${demUnit==='monthly'?'selected':''}>mo hrs</option>
             <option value="annual" ${demUnit==='annual'?'selected':''}>annual hrs</option>
           </select>
+          </div>
           ${Math.abs(weeklyEquiv) > 0.1 ? `<span class="ri-equiv">≈ ${weeklyEquiv > 0?'+':''}${fmt(weeklyEquiv,1)}/wk</span>` : ''}
-        </span>
+        </label>
 
-        <div class="ri-sep"></div>
+        <label class="scen-field">
+          <span class="scen-field-label">Hire techs</span>
+          <input class="scen-number-input" type="number" step="1" value="${hireTechs}" onchange="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'hireTechs',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+        </label>
 
-        <span class="ri-chip">
-          <span class="ri-chip-label">Hire techs</span>
-          <div class="stepper" style="zoom:.9">
-            <button class="step-btn" onclick="adjustPerLab('${lname}','hireTechs',-1)">−</button>
-            <div class="step-val">${hireTechs >= 0 ? '+' : ''}${hireTechs}</div>
-            <button class="step-btn" onclick="adjustPerLab('${lname}','hireTechs',1)">+</button>
-          </div>
-        </span>
-
-        <div class="ri-sep"></div>
-
-        <span class="ri-chip">
-          <span class="ri-chip-label">OT override</span>
-          <div class="stepper" style="zoom:.9">
-            <button class="step-btn" onclick="adjustPerLabOt('${lname}',-10)">−</button>
-            <div class="step-val ${otOverrideVal == null ? 'is-global' : ''}">${otOverrideVal == null ? 'global' : otOverrideVal}</div>
-            <button class="step-btn" onclick="adjustPerLabOt('${lname}',10)">+</button>
-          </div>
-        </span>
+        <label class="scen-field">
+          <span class="scen-field-label">OT override</span>
+          <input class="scen-number-input" type="number" min="0" step="1" value="${otOverrideVal ?? ''}" placeholder="Use global (${g.ot})" onchange="setPerLabOt(decodeURIComponent('${encodedLabName}'),this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+          <span class="scen-field-hint">${otOverrideVal == null ? `Using global default: ${g.ot}` : 'Blank resets to global'}</span>
+        </label>
       </div>
 
       <div class="scen-row row-result s-${rc}">
@@ -1956,24 +2038,57 @@ function getOrInitPerLab(labName) {
   return st.scen.perLab[labName];
 }
 
-function adjustPerLab(labName, field, delta) {
-  const p = getOrInitPerLab(labName);
-  p[field] = (p[field] ?? 0) + delta;
+function flushScenarioResultsIfIdle() {
+  const active = document.activeElement;
+  if (active?.closest && active.closest('#scen-rows')) return;
   renderScenarioResults();
+}
+
+function scheduleScenarioResultsRefresh() {
+  if (scenResultsRenderTimer) clearTimeout(scenResultsRenderTimer);
+  scenResultsRenderTimer = setTimeout(() => {
+    scenResultsRenderTimer = null;
+    flushScenarioResultsIfIdle();
+  }, 120);
+}
+
+function handleScenarioRowsFocusOut(e) {
+  const rows = document.getElementById('scen-rows');
+  if (!rows || !rows.contains(e.target)) return;
+  setTimeout(flushScenarioResultsIfIdle, 0);
+}
+
+function handleScenarioNumberKeydown(event) {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  event.target.blur();
+}
+
+function setPerLabNumber(labName, field, rawValue) {
+  const p = getOrInitPerLab(labName);
+  const n = Number(rawValue);
+  if (!Number.isFinite(n)) return;
+  p[field] = Math.round(n);
+  scheduleScenarioResultsRefresh();
 }
 
 function setPerLabUnit(labName, unit) {
   const p = getOrInitPerLab(labName);
   p.demandUnit = unit;
-  renderScenarioResults();
+  scheduleScenarioResultsRefresh();
 }
 
-function adjustPerLabOt(labName, delta) {
+function setPerLabOt(labName, rawValue) {
   const p = getOrInitPerLab(labName);
-  const current = p.otOverride ?? st.scen.globalOt;
-  const next = Math.max(0, current + delta);
-  p.otOverride = next === st.scen.globalOt ? null : next;
-  renderScenarioResults();
+  const raw = String(rawValue ?? '').trim();
+  if (!raw) {
+    p.otOverride = null;
+  } else {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    p.otOverride = Math.max(0, Math.round(n));
+  }
+  scheduleScenarioResultsRefresh();
 }
 
 async function saveCurrentScenario() {
@@ -2021,9 +2136,8 @@ function loadSavedScenario(id) {
   // Init any missing perLab entries
   st.scen.selectedLabs.forEach(n => { if (!st.scen.perLab[n]) st.scen.perLab[n] = { demandVal:0, demandUnit:'weekly', hireTechs:0, otOverride:null, daysOverride:null, prodOverride:null }; });
   if (document.getElementById('scen-name')) document.getElementById('scen-name').value = st.scen.name;
-  document.getElementById('global-ot-val').textContent = st.scen.globalOt;
-  document.getElementById('global-prod-val').textContent = st.scen.globalProdAdj + '%';
-  document.getElementById('global-days-val').textContent = st.scen.globalDaysDelta;
+  syncScenarioGlobalInputs();
+  renderScenLabPicker();
   setScenView(st.scen.view);
   renderScenLabTags();
   renderScenarioResults();
@@ -2033,9 +2147,11 @@ function resetScenario() {
   st.scen = { view: 'weekly', id: null, name: '', selectedLabs: new Set(), globalOt: 0, globalProdAdj: 0, globalDaysDelta: 0, perLab: {} };
   if (document.getElementById('scen-name')) document.getElementById('scen-name').value = '';
   if (document.getElementById('scen-profile-select')) document.getElementById('scen-profile-select').value = '';
-  document.getElementById('global-ot-val').textContent = '0';
-  document.getElementById('global-prod-val').textContent = '0%';
-  document.getElementById('global-days-val').textContent = '0';
+  scenLabPickerSearchTerm = '';
+  const searchInput = document.getElementById('scen-lab-search');
+  if (searchInput) searchInput.value = '';
+  syncScenarioGlobalInputs();
+  renderScenLabPicker();
   renderScenLabTags();
   renderScenarioResults();
 }
@@ -2211,6 +2327,7 @@ async function init() {
   updateWeekLabel();
   initHeaderTooltips();
   document.addEventListener('click', handleDocumentClickForLabPicker);
+  document.addEventListener('focusout', handleScenarioRowsFocusOut);
   await loadData();
   renderStatusBoard();
 }
