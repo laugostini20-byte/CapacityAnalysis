@@ -1101,17 +1101,8 @@ async function openModal(labName) {
   const lab = st.labList.find(l => l.labName === labName);
   if (!lab) return;
 
-  const m = baseMetrics(lab, 'weekly');
-  const lc = m.status;
-
   document.getElementById('modal-lab-name').textContent = labName;
-  document.getElementById('modal-lab-sub').innerHTML = `
-    <span class="badge ${statusBadgeClass(lc)}">${statusLabel(lc)}</span>
-    <span>Load: <strong>${fmt(m.loadPct, 1)}%</strong></span>
-    <span>OT: <strong>${m.otHrs > 0 ? fmtInt(m.otHrs) + ' hrs/wk' : '—'}</strong></span>
-    <span style="color:#d1d5db">|</span>
-    <span>${fmt(baseMetrics(lab,'weekly').avail, 1)} avail · ${lab.daysPerWeek} days/wk · ${lab.productivityPct}% prod</span>
-  `;
+  document.getElementById('modal-lab-sub').innerHTML = '';
   document.getElementById('lab-modal').removeAttribute('hidden');
   syncModalToolbarState();
   renderModalDetail();
@@ -1257,20 +1248,6 @@ function hasModalSnapshotData(snapshot) {
   return Boolean(snapshot && [snapshot.demand, snapshot.capacity, snapshot.load, snapshot.ot].some(v => v != null && Number.isFinite(v)));
 }
 
-function formatChartDetailValue(type, val) {
-  if (type === 'headcount') {
-    return val != null && Number.isFinite(val) ? `${fmt(val, 1)} techs` : 'N/A';
-  }
-  return formatModalMetricValue(type, val);
-}
-
-function formatMetricDelta(metric, currentValue, baselineValue) {
-  if (currentValue == null || baselineValue == null || !Number.isFinite(currentValue) || !Number.isFinite(baselineValue)) return 'N/A';
-  const delta = currentValue - baselineValue;
-  if (metric === 'load') return `${fmtSgn(delta, 1)}pp`;
-  return `${fmtSgn(delta, 0)} hrs`;
-}
-
 function ensureChartTooltip(wrapper) {
   let tooltipEl = wrapper.querySelector('.chart-tooltip');
   if (!tooltipEl) {
@@ -1285,20 +1262,6 @@ function hideChartTooltip() {
   const wrapper = document.querySelector('.lab-chart-wrap');
   const tooltipEl = wrapper?.querySelector('.chart-tooltip');
   if (tooltipEl) tooltipEl.classList.remove('is-visible');
-}
-
-function renderTooltipComparisonCell(label, type, currentValue, baselineValue, currentYear, baselineYear) {
-  const deltaText = type === 'headcount'
-    ? (currentValue != null && baselineValue != null ? `${fmtSgn(currentValue - baselineValue, 1)} techs` : 'N/A')
-    : formatMetricDelta(type, currentValue, baselineValue);
-  return `
-    <div class="chart-tooltip-cell">
-      <div class="chart-tooltip-cell-label">${label}</div>
-      <div class="chart-tooltip-cell-current">${currentYear}: ${formatChartDetailValue(type, currentValue)}</div>
-      <div class="chart-tooltip-cell-base">${baselineYear}: ${formatChartDetailValue(type, baselineValue)}</div>
-      <div class="chart-tooltip-cell-delta">Delta: ${deltaText}</div>
-    </div>
-  `;
 }
 
 function renderChartTooltip(context, tooltipData) {
@@ -1323,13 +1286,6 @@ function renderChartTooltip(context, tooltipData) {
   const baselineHasData = hasModalSnapshotData(baselineSnap);
   const currentHasData = hasModalSnapshotData(currentSnap);
   const monthKey = currentSnap?.monthKey || baselineSnap?.monthKey || monthKeyForYearIndex(tooltipData.currentYear, dataIndex);
-  const metricLabel = tooltipData.metric === 'load'
-    ? 'Load'
-    : tooltipData.metric === 'demand'
-      ? 'Demand'
-      : tooltipData.metric === 'capacity'
-        ? 'Capacity'
-        : 'OT Needed';
 
   if (currentHasData && baselineHasData) {
     const currentMetric = getMetricValue(currentSnap, tooltipData.metric);
@@ -1348,12 +1304,6 @@ function renderChartTooltip(context, tooltipData) {
           <span class="chart-tooltip-value">${formatModalMetricValue(tooltipData.metric, baselineMetric)}</span>
         </div>
       </div>
-      <div class="chart-tooltip-delta">${metricLabel} delta: <strong>${formatMetricDelta(tooltipData.metric, currentMetric, baselineMetric)}</strong></div>
-      <div class="chart-tooltip-grid">
-        ${renderTooltipComparisonCell('Demand', 'demand', currentSnap.demand, baselineSnap.demand, tooltipData.currentYear, tooltipData.baselineYear)}
-        ${renderTooltipComparisonCell('Capacity', 'capacity', currentSnap.capacity, baselineSnap.capacity, tooltipData.currentYear, tooltipData.baselineYear)}
-        ${renderTooltipComparisonCell('Headcount', 'headcount', currentSnap.techs, baselineSnap.techs, tooltipData.currentYear, tooltipData.baselineYear)}
-      </div>
     `;
   } else {
     const singleSnap = currentHasData ? currentSnap : baselineSnap;
@@ -1369,17 +1319,16 @@ function renderChartTooltip(context, tooltipData) {
           <span class="chart-tooltip-value">${formatModalMetricValue(tooltipData.metric, singleMetric)}</span>
         </div>
       </div>
-      <div class="chart-tooltip-single">
-        <div class="chart-tooltip-single-row"><span>Demand</span><strong>${formatChartDetailValue('demand', singleSnap?.demand)}</strong></div>
-        <div class="chart-tooltip-single-row"><span>Capacity</span><strong>${formatChartDetailValue('capacity', singleSnap?.capacity)}</strong></div>
-        <div class="chart-tooltip-single-row"><span>Headcount</span><strong>${formatChartDetailValue('headcount', singleSnap?.techs)}</strong></div>
-      </div>
     `;
   }
 
   tooltipEl.classList.add('is-visible');
   const padding = 10;
-  let left = tooltip.caretX - (tooltipEl.offsetWidth / 2);
+  const horizontalGap = 18;
+  const canPlaceRight = tooltip.caretX + horizontalGap + tooltipEl.offsetWidth + padding <= wrapper.clientWidth;
+  let left = canPlaceRight
+    ? tooltip.caretX + horizontalGap
+    : tooltip.caretX - tooltipEl.offsetWidth - horizontalGap;
   let top = tooltip.caretY - tooltipEl.offsetHeight - 14;
   left = Math.max(padding, Math.min(left, wrapper.clientWidth - tooltipEl.offsetWidth - padding));
   if (top < padding) {
@@ -1475,8 +1424,40 @@ function renderModalDetail() {
   const lab = st.labList.find(l => l.labName === st.modalLabName);
   if (!lab) return;
   const modalData = buildLabChart(lab);
+  buildModalHeaderSummary(lab, modalData);
   buildModalInsight(modalData);
   buildModalStats(modalData);
+}
+
+function getModalSelectionState(modalData) {
+  const idx = st.modalMonthIndex ?? 0;
+  const baseline = modalData.thisSnapshots[idx] || null;
+  const current = modalData.prevSnapshots[idx] || null;
+  const currentHasData = hasModalSnapshotData(current);
+  const baselineHasData = hasModalSnapshotData(baseline);
+  const selected = currentHasData ? current : baseline;
+  const monthKey = selected?.monthKey || current?.monthKey || baseline?.monthKey || monthKeyForYearIndex(modalData.currentYear, idx);
+  return {idx, baseline, current, currentHasData, baselineHasData, selected, monthKey};
+}
+
+function buildModalHeaderSummary(lab, modalData) {
+  const subEl = document.getElementById('modal-lab-sub');
+  if (!subEl || !modalData) return;
+
+  const {current, selected} = getModalSelectionState(modalData);
+  const headerSnap = current && Number.isFinite(current.load) ? current : selected;
+  const loadPct = headerSnap?.load;
+  const ot = headerSnap?.ot;
+  const avail = headerSnap?.avail;
+  const status = Number.isFinite(loadPct) ? getStatus(loadPct) : 'ok';
+
+  subEl.innerHTML = `
+    <span class="badge ${statusBadgeClass(status)}">${statusLabel(status)}</span>
+    <span>Load: <strong>${Number.isFinite(loadPct) ? `${fmt(loadPct, 1)}%` : '—'}</strong></span>
+    <span>OT: <strong>${ot > 0 ? `${fmtInt(ot)} hrs/mo` : '—'}</strong></span>
+    <span style="color:#d1d5db">|</span>
+    <span>${Number.isFinite(avail) ? fmt(avail, 1) : '—'} avail · ${lab.daysPerWeek} days/wk · ${lab.productivityPct}% prod</span>
+  `;
 }
 
 function buildLabChart(lab) {
@@ -1645,12 +1626,7 @@ function buildLabChart(lab) {
 function buildModalInsight(modalData) {
   const insightEl = document.getElementById('modal-insight');
   if (!insightEl || !modalData) return;
-  const idx = st.modalMonthIndex ?? 0;
-  const baseline = modalData.thisSnapshots[idx] || null;
-  const current = modalData.prevSnapshots[idx] || null;
-  const currentHasData = current && [current.demand, current.capacity, current.load, current.ot].some(v => v != null && Number.isFinite(v));
-  const selected = currentHasData ? current : baseline;
-  const monthKey = selected?.monthKey || monthKeyForYearIndex(modalData.currentYear, idx);
+  const {baseline, current, currentHasData, selected, monthKey} = getModalSelectionState(modalData);
   const metricLabel = modalData.metric === 'load'
     ? 'Load'
     : modalData.metric === 'demand'
