@@ -1989,7 +1989,12 @@ function renderScenRows() {
       <div class="row-inputs">
         <div class="row-inputs-label">${labNameShort}</div>
 
-        <label class="scen-field">
+        <label class="scen-field scen-field-hire">
+          <span class="scen-field-label">Hire techs</span>
+          <input class="scen-number-input" type="number" step="1" value="${hireTechs}" onchange="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'hireTechs',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
+        </label>
+
+        <label class="scen-field scen-field-demand">
           <span class="scen-field-label">Demand delta</span>
           <div class="scen-field-inline">
             <input class="scen-number-input" type="number" step="1" value="${demVal}" onchange="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'demandVal',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
@@ -2002,12 +2007,7 @@ function renderScenRows() {
           ${Math.abs(weeklyEquiv) > 0.1 ? `<span class="ri-equiv">≈ ${weeklyEquiv > 0?'+':''}${fmt(weeklyEquiv,1)}/wk</span>` : ''}
         </label>
 
-        <label class="scen-field">
-          <span class="scen-field-label">Hire techs</span>
-          <input class="scen-number-input" type="number" step="1" value="${hireTechs}" onchange="setPerLabNumber(decodeURIComponent('${encodedLabName}'),'hireTechs',this.value)" onkeydown="handleScenarioNumberKeydown(event)">
-        </label>
-
-        <label class="scen-field">
+        <label class="scen-field scen-field-ot">
           <span class="scen-field-label">OT override</span>
           <input class="scen-number-input" type="number" min="0" step="1" value="${otOverrideVal ?? ''}" placeholder="Use global (${g.ot})" onchange="setPerLabOt(decodeURIComponent('${encodedLabName}'),this.value)" onkeydown="handleScenarioNumberKeydown(event)">
           <span class="scen-field-hint">${otOverrideVal == null ? `Using global default: ${g.ot}` : 'Blank resets to global'}</span>
