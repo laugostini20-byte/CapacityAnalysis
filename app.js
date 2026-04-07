@@ -741,15 +741,23 @@ async function loadData() {
     if (stdHrsCurrentRes.status === 'fulfilled') {
       const { labs, dataDate } = stdHrsCurrentRes.value;
       st.dataDate = dataDate;
+      console.log('[DEBUG] std-hours/current returned', labs.length, 'labs, dataDate:', dataDate);
       labs.forEach(l => {
         const key = mapToCanonicalLabKey(l.labKey || l.labRaw);
         if (isLabActive(key)) st.dbStdHrs[key] = {...l, labKey: key};
+      });
+      // Debug: log yellow labs
+      ['boston','dayton','charlotte','pittsburgh','los angeles','denver','st louis','palm beach','ottawa'].forEach(k => {
+        const e = st.dbStdHrs[k];
+        console.log(`[DEBUG] dbStdHrs["${k}"] =`, e ? e.stdHrsPerWeek : 'MISSING');
       });
       if (dataDate) {
         const d = new Date(dataDate + 'T00:00:00');
         document.getElementById('data-date-label').textContent =
           'Week of ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       }
+    } else {
+      console.warn('[DEBUG] std-hours/current FAILED:', stdHrsCurrentRes.reason);
     }
 
     if (stdHrsAllRes.status === 'fulfilled') {
