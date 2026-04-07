@@ -1180,11 +1180,21 @@ app.get('/api/std-hours/current', async (_req, res) => {
       FROM std_hours_overrides
       ORDER BY lab_key, effective_from DESC, updated_at DESC
     `);
-    const dataDate = result.rows.reduce((max, r) =>
+    // Resolve to canonical keys and keep only the latest per canonical key
+    const canonicalMap = {};
+    result.rows.forEach(r => {
+      const canonical = mapToCanonicalLabKey(r.lab_key);
+      const existing = canonicalMap[canonical];
+      if (!existing || r.effective_date > existing.effective_date) {
+        canonicalMap[canonical] = r;
+      }
+    });
+    const resolved = Object.values(canonicalMap);
+    const dataDate = resolved.reduce((max, r) =>
       (!max || r.effective_date > max ? r.effective_date : max), null);
     res.json({
-      labs: result.rows.map(r => ({
-        labKey: r.lab_key,
+      labs: resolved.map(r => ({
+        labKey: mapToCanonicalLabKey(r.lab_key),
         labRaw: r.lab_raw,
         stdHrsPerWeek: Number(r.std_hours),
         effectiveDate: r.effective_date
