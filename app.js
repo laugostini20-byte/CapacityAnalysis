@@ -1077,7 +1077,7 @@ function updateTableHeaders() {
   const lbl = VIEW_LABEL[st.view] ?? '';
   const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
   set('th-demand', lbl + ' Demand');
-  set('th-hist',   'LY As-Of');
+  set('th-hist',   'PY As-Of');
   set('th-capacity', lbl + ' Capacity');
   set('th-margin', lbl + ' Margin');
   set('th-ot', 'OT Hrs Needed');
