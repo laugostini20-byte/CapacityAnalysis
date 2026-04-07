@@ -137,6 +137,70 @@ const st = {
   chart: null,
 };
 
+// ─── ANALYSIS TAB STATE ──────────────────────────────────────────────────────
+const analysisState = {
+  view: 'weekly',
+  selectedLabs: new Set(),  // Set of labName strings
+  perLab: {},               // { labName: inputs }
+  searchTerm: '',
+};
+
+function defaultAnalysisInputs(lab) {
+  return {
+    headcountDelta:      0,
+    otHrsPerWk:          0,
+    productivityPct:     lab.productivityPct,
+    demandDeltaHrsPerWk: 0,   // stored in weekly hrs
+    currentAutoPct:      0,
+    targetAutoPct:       0,
+  };
+}
+
+function calcAnalysisSnapshot(lab, inputs, view) {
+  const s = VIEW_SCALE[view] ?? 1;
+  const onsite = onsiteFTE(lab.labName, view);
+
+  // ── BEFORE (mirrors baseMetrics) ─────────────────────────────────────────
+  const hrsPerDayBefore = SHIFT_HRS * (lab.productivityPct / 100);
+  const availBefore     = Math.max(0, lab.totalTechs - onsite);
+  const capacityBefore  = availBefore * hrsPerDayBefore * lab.daysPerWeek * s;
+  const demandBefore    = (lab.stdHrsPerWeek ?? 0) * s;
+  const marginBefore    = capacityBefore - demandBefore;
+  const loadBefore      = capacityBefore > 0
+    ? (demandBefore / capacityBefore) * 100
+    : (demandBefore > 0 ? Infinity : 0);
+
+  // ── AFTER ────────────────────────────────────────────────────────────────
+  const adjProdPct     = clamp(inputs.productivityPct, 1, 100);
+  const hrsPerDayAfter = SHIFT_HRS * (adjProdPct / 100);
+  const adjAvail       = Math.max(0, availBefore + (inputs.headcountDelta ?? 0));
+  const adjOT          = (inputs.otHrsPerWk ?? 0) * s;
+  const capacityAfter  = (adjAvail * hrsPerDayAfter * lab.daysPerWeek * s) + adjOT;
+
+  const autoDelta  = Math.max(0, (inputs.targetAutoPct ?? 0) - (inputs.currentAutoPct ?? 0));
+  const autoSaving = (autoDelta / 100) * 0.30;
+  const demandRaw  = demandBefore + ((inputs.demandDeltaHrsPerWk ?? 0) * s);
+  const demandAfter = Math.max(0, demandRaw * (1 - autoSaving));
+  const marginAfter = capacityAfter - demandAfter;
+  const loadAfter   = capacityAfter > 0
+    ? (demandAfter / capacityAfter) * 100
+    : (demandAfter > 0 ? Infinity : 0);
+
+  // ── BREAKDOWN ────────────────────────────────────────────────────────────
+  const gainHeadcount = (adjAvail - availBefore) * hrsPerDayAfter * lab.daysPerWeek * s;
+  const gainOT        = adjOT;
+  const gainProd      = availBefore * (hrsPerDayAfter - hrsPerDayBefore) * lab.daysPerWeek * s;
+  const gainAuto      = -(demandBefore * autoSaving);        // negative = demand reduced
+  const gainDemand    = (inputs.demandDeltaHrsPerWk ?? 0) * s;
+
+  return {
+    before:    { capacity: capacityBefore, demand: demandBefore, margin: marginBefore, load: loadBefore },
+    after:     { capacity: capacityAfter,  demand: demandAfter,  margin: marginAfter,  load: loadAfter },
+    breakdown: { gainHeadcount, gainOT, gainProd, gainAuto, gainDemand },
+    autoDelta, autoSaving,
+  };
+}
+
 let labPickerInitialized = false;
 let labPickerSearchTerm = '';
 let scenLabPickerSearchTerm = '';
