@@ -80,7 +80,7 @@ function loadLabMapping(csvPath) {
       if (isActive) activeCanonicalKeys.push(canonicalKey);
 
       aliasToCanonicalKey[canonicalKey] = canonicalKey;
-      for (let i = 1; i <= 5; i++) {
+      for (let i = 1; i <= 10; i++) {
         const variant = String(row[`Variant ${i}`] || '').trim();
         if (!variant) continue;
         aliasToCanonicalKey[normalizeLabKey(variant)] = canonicalKey;

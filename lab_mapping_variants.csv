@@ -1,43 +1,43 @@
-Canonical Lab,System,Variant 1,Variant 2,Variant 3,Variant 4,Variant 5,Status
-Biomedical,IndySoft,Biomedical,Transcat Biomedical,,,,Active
-Boston,CalTrak,11 - boston,boston cal lab,Boston Cal Lab,Boston - 11,,Active
-Charlotte,CalTrak,17 - charlotte,charlotte cal lab,Charlotte Cal Lab,Charlotte - 17,,Active
-Chesapeake,IndySoft,Chesapeake Cal Lab,,,,,Active
-Cincinnati,CalTrak,Alliance Cal Lab,Alliance,,,,Active
-Cleveland,IndySoft,Cleveland Cal Lab,,,,,Active
-Dayton,CalTrak,15 - dayton,dayton cal lab,Dayton Cal Lab,Dayton - 15,,Active
-Denver,CalTrak,23 - denver,denver cal lab,Denver Cal Lab,Denver - 23,,Active
-Essco,IndySoft,Essco Cal Lab,,,,,Inactive
-"Honda Anna, OH (AEP)",CalTrak,"Honda Anna, OH (AEP)",,,,,Active
-"Honda Dayton, OH",CalTrak,"Honda Dayton, OH",,,,,Active
-"Honda E Liberty, OH (ELP)",CalTrak,"Honda E Liberty, OH (ELP)",,,,,Active
-Honda Greensburg IN (IAP),CalTrak,Honda Greensburg IN (IAP),,,,,Inactive
-"Honda Lincoln, AL (AAP)",CalTrak,"Honda Lincoln, AL (AAP)",,,,,Active
-Honda Marysville OH (MAP),CalTrak,Honda Marysville OH (MAP),,,,,Active
-"Honda Timmonsville (SCM)",CalTrak,"Honda Timmonsville (SCM)",,,,,Active
-Houston,CalTrak,05 - houston,houston cal lab,Houston Cal Lab,Houston - 5,,Active
-Los Angeles,CalTrak,19 - los angeles,los angeles cal lab,Los Angeles Cal Lab,Los Angeles - 19,,Active
-Martin (Burns),IndySoft,Martin Cal Lab (Burns),,,,,Inactive
-Martin (Eau),IndySoft,Martin Cal Lab (Eau),,,,,Inactive
-Martin (GLC),IndySoft,Martin Cal Lab (GLC),,,,,Inactive
-Martin (Los Alam),IndySoft,Martin Cal Lab (Los Alam),,,,,Inactive
-Martin (Mund),IndySoft,Martin Cal Lab (Mund),,,,,Inactive
-Martin (PTS),IndySoft,Martin Cal Lab (PTS),,,,,Inactive
-Martin (RMS),IndySoft,Martin Cal Lab (RMS),,,,,Inactive
-Montreal,IndySoft,Montreal Cal Lab,,,,,Active
-Ottawa,CalTrak,33 - ottawa,ottawa cal lab,Ottawa Cal Lab,Ottawa - 33,,Active
-Palm Beach,CalTrak,61 - palm beach,palm beach cal lab,Palm Beach Cal Lab,Palm Beach - 61,,Active
-Philadelphia,CalTrak,06 - philadelphia,philadelphia cal lab,Philadelphia Cal Lab,Philadelphia - 6,,Active
-Phoenix,CalTrak,24 - phoenix,phoenix cal lab,Phoenix Cal Lab,Phoenix - 24,,Active
-Pipettes Field Service,IndySoft,Pipettes Field Service,,,,,Inactive
-Pipettes Milford,IndySoft,Pipettes Milford Lab,,,,,Inactive
-Pipettes San Diego,IndySoft,Pipettes San Diego Lab,,,,,Inactive
-Pittsburgh,CalTrak,Pittsburgh Cal Lab,13 - pittsburgh,,Pittsburgh - 13,,Active
-Portland,CalTrak,02 - portland,portland cal lab,Portland Cal Lab,Portland - 2,,Active
-Puerto Rico,CalTrak,Puerto Rico Cal Lab,12 - puerto rico,,Puerto Rico - 12,,Active
-Rochester,CalTrak,01 - rochester,rochester cal lab,Rochester Cal Lab,Rochester - 1,,Active
-San Diego,IndySoft,31 - san diego,san diego cal lab,San Diego Cal Lab,San Diego - 31,,Active
-St. Louis,CalTrak,m5 - st louis,st louis cal lab,St. Louis Cal Lab,St. Louis - M5,M5 - St. Louis,Active
-Decatur,IndySoft,Tangent Decatur Cal Lab,,,,,Active
-Indianapolis,IndySoft,Tangent Indianapolis Lab,,,,,Active
-Toronto,CalTrak,09 - toronto,toronto cal lab,Toronto Cal Lab,Toronto - 9,09 - Burlington,Active
+Canonical Lab,System,Variant 1,Variant 2,Variant 3,Variant 4,Variant 5,Variant 6,Status
+Biomedical,IndySoft,Biomedical,Transcat Biomedical,,,Biomedical - Paxinos - 49,,Active
+Boston,CalTrak,11 - boston,boston cal lab,Boston Cal Lab,Boston - 11,,,Active
+Charlotte,CalTrak,17 - charlotte,charlotte cal lab,Charlotte Cal Lab,Charlotte - 17,,,Active
+Chesapeake,IndySoft,Chesapeake Cal Lab,,,,Chesapeake - 56,,Active
+Cincinnati,CalTrak,Alliance Cal Lab,Alliance,,,Cincinnati - 14,,Active
+Cleveland,IndySoft,Cleveland Cal Lab,,,,Cleveland - 68,,Active
+Dayton,CalTrak,15 - dayton,dayton cal lab,Dayton Cal Lab,Dayton - 15,,,Active
+Denver,CalTrak,23 - denver,denver cal lab,Denver Cal Lab,Denver - 23,,,Active
+Essco,IndySoft,Essco Cal Lab,,,,,,,Inactive
+"Honda Anna, OH (AEP)",CalTrak,"Honda Anna, OH (AEP)",,,,,,,Active
+"Honda Dayton, OH",CalTrak,"Honda Dayton, OH",,,,,,,Active
+"Honda E Liberty, OH (ELP)",CalTrak,"Honda E Liberty, OH (ELP)",,,,,,,Active
+Honda Greensburg IN (IAP),CalTrak,Honda Greensburg IN (IAP),,,,,,,Inactive
+"Honda Lincoln, AL (AAP)",CalTrak,"Honda Lincoln, AL (AAP)",,,,,,,Active
+Honda Marysville OH (MAP),CalTrak,Honda Marysville OH (MAP),,,,,,,Active
+"Honda Timmonsville (SCM)",CalTrak,"Honda Timmonsville (SCM)",,,,,,,Active
+Houston,CalTrak,05 - houston,houston cal lab,Houston Cal Lab,Houston - 5,Houston - 05,,Active
+Los Angeles,CalTrak,19 - los angeles,los angeles cal lab,Los Angeles Cal Lab,Los Angeles - 19,,,Active
+Martin (Burns),IndySoft,Martin Cal Lab (Burns),,,,,,,Inactive
+Martin (Eau),IndySoft,Martin Cal Lab (Eau),,,,,,,Inactive
+Martin (GLC),IndySoft,Martin Cal Lab (GLC),,,,,,,Inactive
+Martin (Los Alam),IndySoft,Martin Cal Lab (Los Alam),,,,,,,Inactive
+Martin (Mund),IndySoft,Martin Cal Lab (Mund),,,,,,,Inactive
+Martin (PTS),IndySoft,Martin Cal Lab (PTS),,,,,,,Inactive
+Martin (RMS),IndySoft,Martin Cal Lab (RMS),,,,,,,Inactive
+Montreal,IndySoft,Montreal Cal Lab,,,,Montreal - 34,,Active
+Ottawa,CalTrak,33 - ottawa,ottawa cal lab,Ottawa Cal Lab,Ottawa - 33,,,Active
+Palm Beach,CalTrak,61 - palm beach,palm beach cal lab,Palm Beach Cal Lab,Palm Beach - 61,,,Active
+Philadelphia,CalTrak,06 - philadelphia,philadelphia cal lab,Philadelphia Cal Lab,Philadelphia - 6,Philadelphia - 06,,Active
+Phoenix,CalTrak,24 - phoenix,phoenix cal lab,Phoenix Cal Lab,Phoenix - 24,,,Active
+Pipettes Field Service,IndySoft,Pipettes Field Service,,,,,,,Inactive
+Pipettes Milford,IndySoft,Pipettes Milford Lab,,,,Milford - 42,,Inactive
+Pipettes San Diego,IndySoft,Pipettes San Diego Lab,,,,,,,Inactive
+Pittsburgh,CalTrak,Pittsburgh Cal Lab,13 - pittsburgh,,Pittsburgh - 13,,,Active
+Portland,CalTrak,02 - portland,portland cal lab,Portland Cal Lab,Portland - 2,Portland - 02,,Active
+Puerto Rico,CalTrak,Puerto Rico Cal Lab,12 - puerto rico,,Puerto Rico - 12,,,Active
+Rochester,CalTrak,01 - rochester,rochester cal lab,Rochester Cal Lab,Rochester - 1,Rochester - 01,,Active
+San Diego,IndySoft,31 - san diego,san diego cal lab,San Diego Cal Lab,San Diego - 31,,,Active
+St. Louis,CalTrak,m5 - st louis,st louis cal lab,St. Louis Cal Lab,St. Louis - M5,M5 - St. Louis,,Active
+Decatur,IndySoft,Tangent Decatur Cal Lab,,,,Decatur - 26,,Active
+Indianapolis,IndySoft,Tangent Indianapolis Lab,,,,Indianapolis - 25,,Active
+Toronto,CalTrak,09 - toronto,toronto cal lab,Toronto Cal Lab,Toronto - 9,09 - Burlington,Toronto - 09,Active
