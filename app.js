@@ -776,12 +776,13 @@ async function loadData() {
 function switchTab(tabName) {
   st.tab = tabName;
   document.querySelectorAll('.nav-tab').forEach((el, i) => {
-    const tabs = ['status-board', 'scenario-planner'];
+    const tabs = ['status-board', 'scenario-planner', 'analysis'];
     el.classList.toggle('active', tabs[i] === tabName);
   });
   document.querySelectorAll('.view-panel').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + tabName).classList.add('active');
   if (tabName === 'scenario-planner') renderScenarioPlanner();
+  if (tabName === 'analysis') renderAnalysisTab();
 }
 
 function setView(v) {

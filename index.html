@@ -307,6 +307,7 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="switchTab('status-board')">Status Board</button>
     <button class="nav-tab" onclick="switchTab('scenario-planner')">Scenario Planner</button>
+    <button class="nav-tab" onclick="switchTab('analysis')">Analysis</button>
   </div>
   <div class="nav-meta">
     <span id="data-date-label">—</span>
@@ -620,6 +621,11 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f4f7fb;color:#1a1a2
       </div>
     </div>
   </div>
+</div>
+
+<!-- ─── ANALYSIS TAB ──────────────────────────────────────────────────────── -->
+<div id="view-analysis" class="view-panel">
+  <!-- rendered by renderAnalysisTab() -->
 </div>
 
 <script src="headcount_data.js"></script>
