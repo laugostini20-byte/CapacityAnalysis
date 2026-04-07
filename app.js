@@ -2767,6 +2767,101 @@ function renderAnalysisLabRow(lab) {
   </div>`;
 }
 
+function onAnalysisInput(labName, field, val) {
+  if (!analysisState.perLab[labName]) return;
+  analysisState.perLab[labName][field] = val;
+}
+
+function onAnalysisDemandInput(labName, displayVal) {
+  // displayVal is in current view units — convert back to weekly for storage
+  if (!analysisState.perLab[labName]) return;
+  const s = VIEW_SCALE[analysisState.view] ?? 1;
+  analysisState.perLab[labName].demandDeltaHrsPerWk = displayVal / s;
+  updateAnalysisLabRow(labName);
+}
+
+function syncAnalysisSlider(inputEl, sliderId) {
+  const slider = document.getElementById(sliderId);
+  if (slider) slider.value = inputEl.value;
+  // Trigger full row update after sync
+  const row = inputEl.closest('.analysis-lab-row');
+  if (row) {
+    const labName = [...analysisState.selectedLabs].find(n =>
+      'analysis-row-' + labKey(n) === row.id
+    );
+    if (labName) updateAnalysisLabRow(labName);
+  }
+}
+
+function syncAnalysisInput(sliderEl, inputClass, labName, field) {
+  // Find the matching number input in the same .analysis-ctrl
+  const ctrl = sliderEl.closest('.analysis-ctrl');
+  if (!ctrl) return;
+  const inp = ctrl.querySelector('.' + inputClass);
+  if (inp) inp.value = sliderEl.value;
+  updateAnalysisLabRow(labName);
+}
+
+function updateAnalysisLabRow(labName) {
+  const lab = st.labList.find(l => l.labName === labName);
+  if (!lab || !analysisState.perLab[labName]) return;
+  const rowEl = document.getElementById('analysis-row-' + labKey(labName));
+  if (!rowEl) return;
+  rowEl.outerHTML = renderAnalysisLabRow(lab);
+}
+
+function renderAnalysisRows() {
+  const container = document.getElementById('analysis-rows');
+  if (!container) return;
+  if (analysisState.selectedLabs.size === 0) {
+    container.innerHTML = `<div class="analysis-empty">
+      <div style="font-size:28px">＋</div>
+      <div class="analysis-empty-title">Select a lab from the list to begin</div>
+      <div class="analysis-empty-sub">Each lab gets its own independent controls and snapshot</div>
+    </div>`;
+    return;
+  }
+  const rows = [...analysisState.selectedLabs].map(labName => {
+    const lab = st.labList.find(l => l.labName === labName);
+    return lab ? renderAnalysisLabRow(lab) : '';
+  }).join('');
+  container.innerHTML = rows;
+}
+
+function renderAnalysisTab() {
+  const panel = document.getElementById('view-analysis');
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <!-- View toggle bar -->
+    <div class="analysis-view-bar" id="analysis-view-bar">
+      <span class="analysis-view-bar-label">View</span>
+      <div class="seg-group">
+        <button class="seg-btn${analysisState.view === 'weekly'    ? ' active' : ''}" data-view="weekly"    onclick="setAnalysisView('weekly')">Weekly</button>
+        <button class="seg-btn${analysisState.view === 'monthly'   ? ' active' : ''}" data-view="monthly"   onclick="setAnalysisView('monthly')">Monthly</button>
+        <button class="seg-btn${analysisState.view === 'quarterly' ? ' active' : ''}" data-view="quarterly" onclick="setAnalysisView('quarterly')">Quarterly</button>
+        <button class="seg-btn${analysisState.view === 'yearly'    ? ' active' : ''}" data-view="yearly"    onclick="setAnalysisView('yearly')">Annually</button>
+      </div>
+      <span class="analysis-view-note">All capacity &amp; demand figures scale with selected period</span>
+    </div>
+
+    <div class="analysis-layout">
+      <!-- Lab list -->
+      <div class="analysis-lab-panel">
+        <div class="analysis-lab-panel-title">Select Labs to Analyze</div>
+        <input class="analysis-lab-search" type="text" placeholder="Search labs…"
+          oninput="onAnalysisLabSearch(this.value)" value="${esc(analysisState.searchTerm)}">
+        <div class="analysis-lab-list" id="analysis-lab-list"></div>
+      </div>
+
+      <!-- Rows -->
+      <div class="analysis-rows" id="analysis-rows"></div>
+    </div>`;
+
+  renderAnalysisLabList();
+  renderAnalysisRows();
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 async function init() {
   updateTableHeaders();
