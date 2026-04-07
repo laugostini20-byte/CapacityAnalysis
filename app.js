@@ -2607,25 +2607,20 @@ function analysisViewUnitLabel(view) {
   return view === 'weekly' ? 'wk' : view === 'monthly' ? 'mo' : view === 'quarterly' ? 'qtr' : 'yr';
 }
 
-function renderAnalysisLabRow(lab) {
-  const inputs  = analysisState.perLab[lab.labName];
-  const view    = analysisState.view;
-  const snap    = calcAnalysisSnapshot(lab, inputs, view);
-  const unit    = analysisViewUnitLabel(view);
-  const vLabel  = VIEW_LABEL[view] ?? 'Wk';
-  const s       = VIEW_SCALE[view] ?? 1;
-  const isIndy  = lab.stdHrsPerWeek == null;
-
-  // Demand input: convert stored weekly value to current view units for display
-  const demandDisplayVal = Math.round((inputs.demandDeltaHrsPerWk ?? 0) * s);
-
-  // Auto saving pill
-  const autoPill = snap.autoDelta > 0
+function renderAnalysisAutoPill(snap) {
+  return snap.autoDelta > 0
     ? `<div class="analysis-auto-saving">saves ${fmt(snap.autoSaving * 100, 1)}% tech time &nbsp;(${snap.autoDelta}% × 30%)</div>`
     : `<div style="font-size:10px;color:#9ca3af;font-style:italic">No change — current equals target.</div>`;
+}
 
-  // Gain breakdown rows
+function renderAnalysisSnapshotInner(lab, inputs, view, snap) {
+  const unit = analysisViewUnitLabel(view);
+  const vLabel = VIEW_LABEL[view] ?? 'Wk';
+  const s = VIEW_SCALE[view] ?? 1;
+  const isIndy = lab.stdHrsPerWeek == null;
+  const demandDisplayVal = Math.round((inputs.demandDeltaHrsPerWk ?? 0) * s);
   const bd = snap.breakdown;
+
   const gainRows = [
     analysisGainRow('#00539b', inputs.headcountDelta === 0 ? 'Headcount unchanged' : `${inputs.headcountDelta > 0 ? '+' : ''}${inputs.headcountDelta} techs`,
       inputs.headcountDelta === 0 ? '—' : `${bd.gainHeadcount >= 0 ? '+' : ''}${fmtInt(bd.gainHeadcount)} cap hrs/${unit}`,
@@ -2649,6 +2644,46 @@ function renderAnalysisLabRow(lab) {
 
   const indyNote = isIndy
     ? `<div style="font-size:10px;color:#9ca3af;margin-top:4px">IndySoft lab — no std hours data, demand shown as 0.</div>` : '';
+
+  return `
+    <div class="analysis-snapshot-title">Capacity Snapshot — ${vLabel}</div>
+    ${indyNote}
+    <div class="analysis-ba">
+      <div class="analysis-ba-box" style="${analysisBaBoxStyle(snap.before.load)}">
+        <div class="analysis-ba-label">Before</div>
+        <div class="analysis-ba-load" style="color:${analysisLoadColor(snap.before.load)}">${fmt(snap.before.load, 0)}%</div>
+        <div class="analysis-ba-metrics">
+          <div class="analysis-ba-row"><span class="analysis-ba-key">Capacity</span><span class="analysis-ba-val">${fmtInt(snap.before.capacity)} hrs/${unit}</span></div>
+          <div class="analysis-ba-row"><span class="analysis-ba-key">Demand</span><span class="analysis-ba-val">${fmtInt(snap.before.demand)} hrs/${unit}</span></div>
+          <div class="analysis-ba-row"><span class="analysis-ba-key">Margin</span><span class="analysis-ba-val ${snap.before.margin >= 0 ? 'pos' : 'neg'}">${snap.before.margin >= 0 ? '+' : ''}${fmtInt(snap.before.margin)} hrs</span></div>
+        </div>
+      </div>
+      <div class="analysis-ba-arrow">→</div>
+      <div class="analysis-ba-box" style="${analysisBaBoxStyle(snap.after.load)}">
+        <div class="analysis-ba-label">After</div>
+        <div class="analysis-ba-load" style="color:${analysisLoadColor(snap.after.load)}">${fmt(snap.after.load, 0)}%</div>
+        <div class="analysis-ba-metrics">
+          <div class="analysis-ba-row"><span class="analysis-ba-key">Capacity</span><span class="analysis-ba-val">${fmtInt(snap.after.capacity)} hrs/${unit}</span></div>
+          <div class="analysis-ba-row"><span class="analysis-ba-key">Demand</span><span class="analysis-ba-val">${fmtInt(snap.after.demand)} hrs/${unit}</span></div>
+          <div class="analysis-ba-row"><span class="analysis-ba-key">Margin</span><span class="analysis-ba-val ${snap.after.margin >= 0 ? 'pos' : 'neg'}">${snap.after.margin >= 0 ? '+' : ''}${fmtInt(snap.after.margin)} hrs</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="analysis-breakdown">
+      <div class="analysis-breakdown-title">Where the change comes from</div>
+      ${gainRows}
+    </div>`;
+}
+
+function renderAnalysisLabRow(lab) {
+  const inputs  = analysisState.perLab[lab.labName];
+  const view    = analysisState.view;
+  const snap    = calcAnalysisSnapshot(lab, inputs, view);
+  const unit    = analysisViewUnitLabel(view);
+  const s       = VIEW_SCALE[view] ?? 1;
+
+  // Demand input: convert stored weekly value to current view units for display
+  const demandDisplayVal = Math.round((inputs.demandDeltaHrsPerWk ?? 0) * s);
 
   const labNameJson = JSON.stringify(lab.labName).replace(/"/g, '&quot;');
 
@@ -2729,39 +2764,13 @@ function renderAnalysisLabRow(lab) {
             </div>
           </div>
           <div class="analysis-auto-note">Current % sets the starting point only. Only the gap between current and target drives capacity impact.</div>
-          ${autoPill}
+          <span id="analysis-auto-pill-${labKey(lab.labName)}">${renderAnalysisAutoPill(snap)}</span>
         </div>
       </div>
 
       <!-- Snapshot -->
-      <div class="analysis-snapshot">
-        <div class="analysis-snapshot-title">Capacity Snapshot — ${vLabel}</div>
-        ${indyNote}
-        <div class="analysis-ba">
-          <div class="analysis-ba-box" style="${analysisBaBoxStyle(snap.before.load)}">
-            <div class="analysis-ba-label">Before</div>
-            <div class="analysis-ba-load" style="color:${analysisLoadColor(snap.before.load)}">${fmt(snap.before.load, 0)}%</div>
-            <div class="analysis-ba-metrics">
-              <div class="analysis-ba-row"><span class="analysis-ba-key">Capacity</span><span class="analysis-ba-val">${fmtInt(snap.before.capacity)} hrs/${unit}</span></div>
-              <div class="analysis-ba-row"><span class="analysis-ba-key">Demand</span><span class="analysis-ba-val">${fmtInt(snap.before.demand)} hrs/${unit}</span></div>
-              <div class="analysis-ba-row"><span class="analysis-ba-key">Margin</span><span class="analysis-ba-val ${snap.before.margin >= 0 ? 'pos' : 'neg'}">${snap.before.margin >= 0 ? '+' : ''}${fmtInt(snap.before.margin)} hrs</span></div>
-            </div>
-          </div>
-          <div class="analysis-ba-arrow">→</div>
-          <div class="analysis-ba-box" style="${analysisBaBoxStyle(snap.after.load)}">
-            <div class="analysis-ba-label">After</div>
-            <div class="analysis-ba-load" style="color:${analysisLoadColor(snap.after.load)}">${fmt(snap.after.load, 0)}%</div>
-            <div class="analysis-ba-metrics">
-              <div class="analysis-ba-row"><span class="analysis-ba-key">Capacity</span><span class="analysis-ba-val">${fmtInt(snap.after.capacity)} hrs/${unit}</span></div>
-              <div class="analysis-ba-row"><span class="analysis-ba-key">Demand</span><span class="analysis-ba-val">${fmtInt(snap.after.demand)} hrs/${unit}</span></div>
-              <div class="analysis-ba-row"><span class="analysis-ba-key">Margin</span><span class="analysis-ba-val ${snap.after.margin >= 0 ? 'pos' : 'neg'}">${snap.after.margin >= 0 ? '+' : ''}${fmtInt(snap.after.margin)} hrs</span></div>
-            </div>
-          </div>
-        </div>
-        <div class="analysis-breakdown">
-          <div class="analysis-breakdown-title">Where the change comes from</div>
-          ${gainRows}
-        </div>
+      <div class="analysis-snapshot" id="analysis-snap-${labKey(lab.labName)}">
+        ${renderAnalysisSnapshotInner(lab, inputs, view, snap)}
       </div>
     </div>
   </div>`;
@@ -2805,9 +2814,15 @@ function syncAnalysisInput(sliderEl, inputClass, labName, field) {
 function updateAnalysisLabRow(labName) {
   const lab = st.labList.find(l => l.labName === labName);
   if (!lab || !analysisState.perLab[labName]) return;
-  const rowEl = document.getElementById('analysis-row-' + labKey(labName));
-  if (!rowEl) return;
-  rowEl.outerHTML = renderAnalysisLabRow(lab);
+  const inputs = analysisState.perLab[labName];
+  const view = analysisState.view;
+  const snap = calcAnalysisSnapshot(lab, inputs, view);
+
+  const snapEl = document.getElementById('analysis-snap-' + labKey(labName));
+  if (snapEl) snapEl.innerHTML = renderAnalysisSnapshotInner(lab, inputs, view, snap);
+
+  const pillEl = document.getElementById('analysis-auto-pill-' + labKey(labName));
+  if (pillEl) pillEl.innerHTML = renderAnalysisAutoPill(snap);
 }
 
 function renderAnalysisRows() {
