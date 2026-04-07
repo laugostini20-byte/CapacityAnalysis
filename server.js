@@ -786,6 +786,11 @@ function authMiddleware(req, res, next) {
 
 app.use(express.json());
 app.use(authMiddleware);
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  next();
+});
 app.use(express.static(__dirname));
 
 app.get('/api/health', async (_req, res) => {

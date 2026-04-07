@@ -689,7 +689,9 @@ function buildLabList() {
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 async function apiFetch(url, opts = {}) {
-  const res = await fetch(url, opts);
+  const sep = url.includes('?') ? '&' : '?';
+  const bustUrl = url + sep + '_t=' + Date.now();
+  const res = await fetch(bustUrl, { ...opts, cache: 'no-store' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `HTTP ${res.status}`);
