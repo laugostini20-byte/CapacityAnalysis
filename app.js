@@ -194,8 +194,8 @@ function calcAnalysisSnapshot(lab, inputs, view) {
   const gainDemand    = (inputs.demandDeltaHrsPerWk ?? 0) * s;
 
   return {
-    before:    { capacity: capacityBefore, demand: demandBefore, margin: marginBefore, load: loadBefore },
-    after:     { capacity: capacityAfter,  demand: demandAfter,  margin: marginAfter,  load: loadAfter },
+    before:    { capacity: capacityBefore, demand: demandBefore, margin: marginBefore, load: loadBefore, techs: availBefore },
+    after:     { capacity: capacityAfter,  demand: demandAfter,  margin: marginAfter,  load: loadAfter,  techs: adjAvail },
     breakdown: { gainHeadcount, gainOT, gainProd, gainAuto, gainDemand },
     autoDelta, autoSaving,
   };
@@ -2655,6 +2655,7 @@ function renderAnalysisSnapshotInner(lab, inputs, view, snap) {
         <div class="analysis-ba-metrics">
           <div class="analysis-ba-row"><span class="analysis-ba-key">Capacity</span><span class="analysis-ba-val">${fmtInt(snap.before.capacity)} hrs/${unit}</span></div>
           <div class="analysis-ba-row"><span class="analysis-ba-key">Demand</span><span class="analysis-ba-val">${fmtInt(snap.before.demand)} hrs/${unit}</span></div>
+          <div class="analysis-ba-row"><span class="analysis-ba-key">Avail Techs</span><span class="analysis-ba-val">${snap.before.techs}</span></div>
           <div class="analysis-ba-row"><span class="analysis-ba-key">Margin</span><span class="analysis-ba-val ${snap.before.margin >= 0 ? 'pos' : 'neg'}">${snap.before.margin >= 0 ? '+' : ''}${fmtInt(snap.before.margin)} hrs</span></div>
         </div>
       </div>
@@ -2665,6 +2666,7 @@ function renderAnalysisSnapshotInner(lab, inputs, view, snap) {
         <div class="analysis-ba-metrics">
           <div class="analysis-ba-row"><span class="analysis-ba-key">Capacity</span><span class="analysis-ba-val">${fmtInt(snap.after.capacity)} hrs/${unit}</span></div>
           <div class="analysis-ba-row"><span class="analysis-ba-key">Demand</span><span class="analysis-ba-val">${fmtInt(snap.after.demand)} hrs/${unit}</span></div>
+          <div class="analysis-ba-row"><span class="analysis-ba-key">Avail Techs</span><span class="analysis-ba-val ${snap.after.techs !== snap.before.techs ? (snap.after.techs > snap.before.techs ? 'pos' : 'neg') : ''}">${snap.after.techs}</span></div>
           <div class="analysis-ba-row"><span class="analysis-ba-key">Margin</span><span class="analysis-ba-val ${snap.after.margin >= 0 ? 'pos' : 'neg'}">${snap.after.margin >= 0 ? '+' : ''}${fmtInt(snap.after.margin)} hrs</span></div>
         </div>
       </div>
