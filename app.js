@@ -2528,6 +2528,54 @@ async function submitUpload(e, type) {
   }
 }
 
+// ─── ANALYSIS TAB FUNCTIONS ──────────────────────────────────────────────────
+
+function setAnalysisView(v) {
+  analysisState.view = v;
+  document.querySelectorAll('#analysis-view-bar .seg-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === v);
+  });
+  renderAnalysisRows();
+}
+
+function toggleAnalysisLab(labName) {
+  if (analysisState.selectedLabs.has(labName)) {
+    analysisState.selectedLabs.delete(labName);
+    delete analysisState.perLab[labName];
+  } else {
+    const lab = st.labList.find(l => l.labName === labName);
+    if (lab) analysisState.perLab[labName] = defaultAnalysisInputs(lab);
+    analysisState.selectedLabs.add(labName);
+  }
+  renderAnalysisLabList();
+  renderAnalysisRows();
+}
+
+function onAnalysisLabSearch(term) {
+  analysisState.searchTerm = term.toLowerCase();
+  renderAnalysisLabList();
+}
+
+function renderAnalysisLabList() {
+  const container = document.getElementById('analysis-lab-list');
+  if (!container) return;
+  const term = analysisState.searchTerm;
+  const labs = st.labList.filter(l => !term || l.labName.toLowerCase().includes(term));
+
+  container.innerHTML = labs.map(lab => {
+    const selected = analysisState.selectedLabs.has(lab.labName);
+    const metrics  = baseMetrics(lab, analysisState.view);
+    const dotColor = metrics.status === 'over' ? '#ef4444'
+                   : metrics.status === 'risk' ? '#f59e0b' : '#22c55e';
+    return `<div class="analysis-lab-item${selected ? ' selected' : ''}"
+                 onclick="toggleAnalysisLab(${JSON.stringify(lab.labName)})">
+      <div class="analysis-lab-check">${selected ? '✓' : ''}</div>
+      <span>${esc(lab.labName)}</span>
+      <div class="analysis-status-dot" style="background:${dotColor}"></div>
+    </div>`;
+  }).join('');
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 async function init() {
   updateTableHeaders();
