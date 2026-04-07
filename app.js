@@ -2568,7 +2568,7 @@ function renderAnalysisLabList() {
     const dotColor = metrics.status === 'over' ? '#ef4444'
                    : metrics.status === 'risk' ? '#f59e0b' : '#22c55e';
     return `<div class="analysis-lab-item${selected ? ' selected' : ''}"
-                 onclick="toggleAnalysisLab(${JSON.stringify(lab.labName)})">
+                 onclick="toggleAnalysisLab(${JSON.stringify(lab.labName).replace(/"/g, '&quot;')})">
       <div class="analysis-lab-check">${selected ? '✓' : ''}</div>
       <span>${esc(lab.labName)}</span>
       <div class="analysis-status-dot" style="background:${dotColor}"></div>
@@ -2650,7 +2650,7 @@ function renderAnalysisLabRow(lab) {
   const indyNote = isIndy
     ? `<div style="font-size:10px;color:#9ca3af;margin-top:4px">IndySoft lab — no std hours data, demand shown as 0.</div>` : '';
 
-  const labNameJson = JSON.stringify(lab.labName);
+  const labNameJson = JSON.stringify(lab.labName).replace(/"/g, '&quot;');
 
   return `<div class="analysis-lab-row" id="analysis-row-${labKey(lab.labName)}">
     <div class="analysis-row-header">
