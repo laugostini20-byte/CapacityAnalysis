@@ -163,6 +163,7 @@ async function submitUpload(e, type) {
     buildLabList();
     renderStatusBoard();
     if (st.tab === 'scenario-planner') renderScenarioPlanner();
+    if (st.tab === 'historical-wip') renderHistoricalWipTab();
   } catch (err) {
     resultEl.className = 'upload-result err';
     resultEl.textContent = 'Error: ' + err.message;

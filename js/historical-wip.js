@@ -55,8 +55,6 @@ function renderHistoricalWipCoverage(coverage) {
   } else if (daysBehind > 7) {
     staleClass = 'hwip-stale-warn';
     staleLabel = `${daysBehind} days behind`;
-  } else if (daysBehind > 0) {
-    staleLabel = `${daysBehind} days behind`;
   }
 
   const lastUploadLine = coverage.lastUpload

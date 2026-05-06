@@ -43,9 +43,9 @@ function createHistoricalWipRouter(ctx) {
         FROM historical_wip
       `);
       const lastUploadResult = await pool.query(`
-        SELECT source_filename, created_at
+        SELECT source_filename, updated_at AS created_at
         FROM historical_wip
-        ORDER BY created_at DESC
+        ORDER BY updated_at DESC
         LIMIT 1
       `);
       const row = summary.rows[0];

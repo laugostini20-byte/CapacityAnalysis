@@ -600,17 +600,17 @@ function parseHistoricalWipRows(workbookBuffer) {
   try {
     wb = XLSX.read(workbookBuffer, {type: 'buffer'});
   } catch (err) {
-    issues.push({reason: `Could not parse workbook: ${err.message}`});
+    issues.push(`Could not parse workbook: ${err.message}`);
     return {overrides, issues, skipped};
   }
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) {
-    issues.push({reason: 'Workbook has no sheets'});
+    issues.push('Workbook has no sheets');
     return {overrides, issues, skipped};
   }
   const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: null});
   if (!rows.length) {
-    issues.push({reason: 'Workbook is empty'});
+    issues.push('Workbook is empty');
     return {overrides, issues, skipped};
   }
 
@@ -621,7 +621,7 @@ function parseHistoricalWipRows(workbookBuffer) {
     if (iso) dateCols.push({idx: c, date: iso});
   }
   if (!dateCols.length) {
-    issues.push({reason: 'No date columns found in header (expected dates in columns 3+)'});
+    issues.push('No date columns found in header (expected dates in columns 3+)');
     return {overrides, issues, skipped};
   }
 
