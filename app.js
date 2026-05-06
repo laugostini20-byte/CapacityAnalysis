@@ -171,10 +171,14 @@ function switchTab(tabName) {
     const tabs = ['status-board', 'scenario-planner', 'analysis'];
     el.classList.toggle('active', tabs[i] === tabName);
   });
+  // Toggle the historical-wip nav link "active" state separately (it's an <a>, not a .nav-tab button)
+  const histLink = document.getElementById('nav-historical-wip-link');
+  if (histLink) histLink.classList.toggle('active', tabName === 'historical-wip');
   document.querySelectorAll('.view-panel').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + tabName).classList.add('active');
   if (tabName === 'scenario-planner') renderScenarioPlanner();
   if (tabName === 'analysis') renderAnalysisTab();
+  if (tabName === 'historical-wip') renderHistoricalWipTab();
 }
 
 
