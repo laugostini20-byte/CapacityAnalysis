@@ -65,3 +65,11 @@ function defaultAnalysisInputs(lab) {
     targetAutoPct:       0,
   };
 }
+
+// ─── HISTORICAL WIP TAB STATE ────────────────────────────────────────────────
+const historicalWipState = {
+  coverage: null,    // {firstDate, lastDate, today, daysBehind, totalEntries, labCount, lastUpload}
+  rangeStart: null,  // ISO date — defaults to lastDate - 60d
+  rangeEnd: null,    // ISO date — defaults to lastDate
+  searchTerm: '',
+};
