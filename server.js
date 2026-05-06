@@ -587,6 +587,112 @@ function parseHeadcountOverrides(rows) {
   return {overrides: [...deduped.values()], issues, skipped};
 }
 
+// Parses an xlsx loaded as raw rows into historical WIP overrides.
+// Mirrors the format used by loadHistoricalWipFromWorkbook (header in row 0,
+// lab in column 1, category in column 2, daily values in columns 3+).
+// Returns {overrides, issues, skipped}.
+function parseHistoricalWipRows(workbookBuffer) {
+  const overrides = [];
+  const issues = [];
+  const skipped = [];
+
+  let wb;
+  try {
+    wb = XLSX.read(workbookBuffer, {type: 'buffer'});
+  } catch (err) {
+    issues.push({reason: `Could not parse workbook: ${err.message}`});
+    return {overrides, issues, skipped};
+  }
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) {
+    issues.push({reason: 'Workbook has no sheets'});
+    return {overrides, issues, skipped};
+  }
+  const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: null});
+  if (!rows.length) {
+    issues.push({reason: 'Workbook is empty'});
+    return {overrides, issues, skipped};
+  }
+
+  const header = rows[0] || [];
+  const dateCols = [];
+  for (let c = 3; c < header.length; c++) {
+    const iso = excelDateToISO(header[c]);
+    if (iso) dateCols.push({idx: c, date: iso});
+  }
+  if (!dateCols.length) {
+    issues.push({reason: 'No date columns found in header (expected dates in columns 3+)'});
+    return {overrides, issues, skipped};
+  }
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const category = String(row[2] || '').trim();
+    if (category !== HISTORICAL_WIP_CATEGORY) continue;
+
+    const labRaw = String(row[1] || '').trim();
+    if (!labRaw) {
+      skipped.push({rowNumber: r + 1, reason: 'Empty lab name'});
+      continue;
+    }
+    const labKey = normalizeLabKey(labRaw);
+    const canonicalKey = LAB_MAPPING.aliasToCanonicalKey[labKey] || labKey;
+    if (!LAB_MAPPING.canonicalLabByKey[canonicalKey]) {
+      skipped.push({rowNumber: r + 1, labRaw, reason: `Unknown lab: "${labRaw}"`});
+      continue;
+    }
+
+    for (const dc of dateCols) {
+      const v = row[dc.idx];
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
+      overrides.push({
+        labRaw,
+        labKey: canonicalKey,
+        entryDate: dc.date,
+        stdHrs: Number(v)
+      });
+    }
+  }
+
+  return {overrides, issues, skipped};
+}
+
+// Merges parsed historical WIP overrides into the historical_wip table.
+// Insert new (lab_key, entry_date) rows; update existing rows when std_hrs differs;
+// leave unchanged rows alone. Returns {inserted, updated, unchanged}.
+async function syncHistoricalWipOverrides(client, overrides, sourceFilename) {
+  let inserted = 0;
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const o of overrides) {
+    const existing = await client.query(
+      `SELECT std_hrs FROM historical_wip WHERE lab_key = $1 AND entry_date = $2`,
+      [o.labKey, o.entryDate]
+    );
+    if (!existing.rows.length) {
+      await client.query(
+        `INSERT INTO historical_wip (lab_raw, lab_key, entry_date, std_hrs, source_filename)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [o.labRaw, o.labKey, o.entryDate, o.stdHrs, sourceFilename]
+      );
+      inserted++;
+    } else if (Number(existing.rows[0].std_hrs) !== o.stdHrs) {
+      await client.query(
+        `UPDATE historical_wip
+         SET std_hrs = $1, source_filename = $2, updated_at = NOW()
+         WHERE lab_key = $3 AND entry_date = $4`,
+        [o.stdHrs, sourceFilename, o.labKey, o.entryDate]
+      );
+      updated++;
+    } else {
+      unchanged++;
+    }
+  }
+
+  return {inserted, updated, unchanged};
+}
+
 async function ensureSchema() {
   if (!pool) return;
   await pool.query(SCHEMA_SQL);
@@ -890,6 +996,8 @@ const ctx = {
   LAB_MAPPING_CSV_PATH,
   HISTORICAL_WIP,
   loadHistoricalWipFromDb,
+  parseHistoricalWipRows,
+  syncHistoricalWipOverrides,
   mapToCanonicalLabKey,
   parseRowsFromBuffer,
   parseScheduleEvents,
