@@ -793,18 +793,7 @@ app.use('/api', (_req, res, next) => {
 });
 app.use(express.static(__dirname));
 
-app.get('/api/health', async (_req, res) => {
-  if (!pool) {
-    res.json({ok: true, database: 'not_configured'});
-    return;
-  }
-  try {
-    await pool.query('SELECT 1');
-    res.json({ok: true, database: 'connected'});
-  } catch (err) {
-    res.status(500).json({ok: false, error: err.message});
-  }
-});
+app.use('/api/health', require('./routes/health')(pool));
 
 app.get('/api/lab-mapping', (_req, res) => {
   const activeLabs = LAB_MAPPING.activeCanonicalKeys.map((labKey) => ({
