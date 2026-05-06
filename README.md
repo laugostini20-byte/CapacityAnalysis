@@ -78,3 +78,22 @@ For standard-hours uploads:
 5. Deploy.
 
 On startup, the app auto-runs `schema.sql` to create required tables.
+
+## Security notes
+
+`npm audit` reports one high-severity finding in the `xlsx` dependency
+(prototype pollution and ReDoS — GHSA-4r6h-8v6p-xvw6, GHSA-5pgg-2g8v-p4x9).
+No fix is available on npm because SheetJS no longer publishes there.
+
+This is accepted for now because:
+
+- The app is gated by HTTP Basic Auth (`APP_USER` / `APP_PASS`) and is only
+  used by a small, trusted group of internal users.
+- Uploaded files come from internal calibration systems, not untrusted sources.
+- Both CVEs require the attacker to control file content; there is no
+  practical exposure given the threat model above.
+
+If the tool is ever opened to a wider or untrusted user base, swap to the
+patched SheetJS CDN distribution (`npm install https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz`)
+or replace `xlsx` with `exceljs`.
+
