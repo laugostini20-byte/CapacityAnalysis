@@ -181,6 +181,46 @@ function loadHistoricalWipFromWorkbook(xlsxPath) {
   }
 }
 
+// One-time migration: imports rows from the historical WIP xlsx into the
+// historical_wip table. Idempotent — should only be called when the table
+// is empty. Returns count of rows inserted.
+async function importHistoricalWipFromXlsx(pool, xlsxPath) {
+  const wipData = loadHistoricalWipFromWorkbook(xlsxPath);
+  if (!wipData.loaded) {
+    console.warn('Historical WIP migration skipped:', wipData.message);
+    return 0;
+  }
+
+  const sourceFilename = wipData.source;
+  let rowCount = 0;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const [date, perLab] of Object.entries(wipData.dailyByDate)) {
+      for (const [labKey, value] of Object.entries(perLab)) {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) continue;
+        // labKey here is already normalized (from loadHistoricalWipFromWorkbook).
+        // We need to recover the lab_raw from the labs list — best-effort, fall back to labKey.
+        const labRaw = wipData.labs.find(l => normalizeLabKey(l) === labKey) || labKey;
+        await client.query(
+          `INSERT INTO historical_wip (lab_raw, lab_key, entry_date, std_hrs, source_filename)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (lab_key, entry_date) DO NOTHING`,
+          [labRaw, labKey, date, value, sourceFilename]
+        );
+        rowCount++;
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return rowCount;
+}
+
 const HISTORICAL_WIP = loadHistoricalWipFromWorkbook(HISTORICAL_WIP_XLSX_PATH);
 
 function normalizeHeader(v) {
