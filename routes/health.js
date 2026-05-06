@@ -1,13 +1,10 @@
 const express = require('express');
 
 /**
- * Health check route.
- * Mount with: app.use('/api/health', createHealthRouter(pool));
- *
- * @param {import('pg').Pool|null} pool - Postgres pool, or null if DB not configured.
- * @returns {express.Router}
+ * Health check route. Mount: app.use('/api/health', createHealthRouter(ctx));
  */
-function createHealthRouter(pool) {
+function createHealthRouter(ctx) {
+  const {pool} = ctx;
   const router = express.Router();
 
   router.get('/', async (_req, res) => {
