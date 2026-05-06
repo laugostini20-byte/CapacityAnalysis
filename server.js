@@ -221,6 +221,54 @@ async function importHistoricalWipFromXlsx(pool, xlsxPath) {
   return rowCount;
 }
 
+// Loads historical WIP from the database in the same shape that
+// loadHistoricalWipFromWorkbook used to return. Used by GET /api/historical-wip
+// so existing front-end consumers (loadData, modal chart) keep working.
+async function loadHistoricalWipFromDb(pool) {
+  const fallback = {
+    source: 'historical_wip (db)',
+    category: HISTORICAL_WIP_CATEGORY,
+    dailyByDate: {},
+    range: {start: null, end: null},
+    labs: [],
+    loaded: false,
+    message: 'Database not configured'
+  };
+  if (!pool) return fallback;
+
+  try {
+    const result = await pool.query(
+      `SELECT lab_raw, lab_key, entry_date::text AS entry_date, std_hrs
+       FROM historical_wip
+       ORDER BY entry_date, lab_key`
+    );
+    const dailyByDate = {};
+    const labSet = new Set();
+    for (const row of result.rows) {
+      const date = row.entry_date;
+      if (!dailyByDate[date]) dailyByDate[date] = {};
+      dailyByDate[date][row.lab_key] = Number(row.std_hrs);
+      labSet.add(row.lab_raw);
+    }
+    const dates = Object.keys(dailyByDate).sort();
+    return {
+      source: 'historical_wip (db)',
+      category: HISTORICAL_WIP_CATEGORY,
+      dailyByDate,
+      range: {start: dates[0] || null, end: dates[dates.length - 1] || null},
+      labs: [...labSet].sort((a, b) => a.localeCompare(b)),
+      loaded: true,
+      message: null
+    };
+  } catch (err) {
+    return {
+      ...fallback,
+      loaded: false,
+      message: `Failed to query historical_wip: ${err.message}`
+    };
+  }
+}
+
 const HISTORICAL_WIP = loadHistoricalWipFromWorkbook(HISTORICAL_WIP_XLSX_PATH);
 
 function normalizeHeader(v) {
