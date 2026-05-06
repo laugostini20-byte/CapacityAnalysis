@@ -4,6 +4,9 @@
   "private": true,
   "description": "Lab capacity analysis tool with persistent onsite schedule storage.",
   "main": "server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js"
