@@ -889,6 +889,7 @@ const ctx = {
   LAB_MAPPING,
   LAB_MAPPING_CSV_PATH,
   HISTORICAL_WIP,
+  loadHistoricalWipFromDb,
   mapToCanonicalLabKey,
   parseRowsFromBuffer,
   parseScheduleEvents,
