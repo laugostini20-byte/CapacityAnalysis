@@ -1,66 +1,8 @@
 'use strict';
 
-
-// ─── STATE ───────────────────────────────────────────────────────────────────
-const st = {
-  view: 'weekly',
-  tab: 'status-board',
-  weekOffset: 0,               // weeks forward/back from today (for week nav)
-  filters: { system: 'caltrak', status: 'all', selectedLabs: new Set() },
-  sortKey: 'load',
-  sortDir: -1,                 // -1 = desc (highest load first)
-  labList: [],                 // final computed array of lab objects
-  labSettings: {},             // { labKey: { productivityPct, daysPerWeek, systemType } }
-  scheduleEvents: [],          // from /api/schedules
-  dbStdHrs: {},                // { labKey: stdHrsPerWeek } from DB
-  dbStdHrsTimelineByLab: {},   // { labKey: [{effectiveFrom,effectiveTo,stdHours,updatedAt}] }
-  dbHeadcountByMonth: {},      // { 'YYYY-MM': { labKey: headcount } } from DB
-  historicalWipDaily: {},      // { 'YYYY-MM-DD': { normalizedLabKey: value } }
-  historicalWipDates: [],      // sorted dates from historicalWipDaily
-  labMapping: {
-    aliasToCanonicalKey: {},
-    canonicalLabByKey: {},
-    systemByCanonicalKey: {},
-    isActiveByCanonicalKey: {},
-    activeLabKeySet: new Set(),
-  },
-  dataDate: null,
-  savedScenarios: [],
-  scen: {
-    view: 'weekly',
-    id: null,
-    name: '',
-    selectedLabs: new Set(),   // lab names in scope
-    globalOt: 0,
-    globalProdAdj: 0,          // legacy scenario field; new UI uses per-lab productivityPct
-    globalDaysDelta: 0,
-    perLab: {},                // { labName: { demandVal, demandUnit, hireTechs, otOverride, daysOverride, productivityPct, prodOverride } }
-  },
-  modalLabName: null,
-  modalMetric: 'load',
-  modalComparePrev: true,
-  modalMonthIndex: null,
-  chart: null,
-};
-
-// ─── ANALYSIS TAB STATE ──────────────────────────────────────────────────────
-const analysisState = {
-  view: 'weekly',
-  selectedLabs: new Set(),  // Set of labName strings
-  perLab: {},               // { labName: inputs }
-  searchTerm: '',
-};
-
-function defaultAnalysisInputs(lab) {
-  return {
-    headcountDelta:      0,
-    otHrsPerWk:          0,
-    productivityPct:     lab.productivityPct,
-    demandDeltaHrsPerWk: 0,   // stored in weekly hrs
-    currentAutoPct:      0,
-    targetAutoPct:       0,
-  };
-}
+// State (st, analysisState, defaultAnalysisInputs) lives in js/state.js.
+// Constants and pure utilities live in js/constants.js + js/utils.js.
+// apiFetch lives in js/api.js. All loaded before this file.
 
 function calcAnalysisSnapshot(lab, inputs, view) {
   const s = VIEW_SCALE[view] ?? 1;
@@ -565,16 +507,8 @@ function buildLabList() {
 }
 
 // ─── API ─────────────────────────────────────────────────────────────────────
-async function apiFetch(url, opts = {}) {
-  const sep = url.includes('?') ? '&' : '?';
-  const bustUrl = url + sep + '_t=' + Date.now();
-  const res = await fetch(bustUrl, { ...opts, cache: 'no-store' });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
+// apiFetch lives in js/api.js. loadData stays here because it touches a lot of
+// app-side state and rendering helpers.
 
 async function loadData() {
   try {
