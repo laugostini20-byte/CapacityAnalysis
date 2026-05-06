@@ -871,6 +871,19 @@ async function start() {
   if (pool) {
     await ensureSchema();
     await pool.query('SELECT 1');
+
+    // One-time migration: if historical_wip is empty, import the xlsx.
+    const wipCount = await pool.query('SELECT COUNT(*) AS c FROM historical_wip');
+    if (Number(wipCount.rows[0].c) === 0) {
+      try {
+        const inserted = await importHistoricalWipFromXlsx(pool, HISTORICAL_WIP_XLSX_PATH);
+        // eslint-disable-next-line no-console
+        console.log(`Historical WIP migration: inserted ${inserted} rows from xlsx.`);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Historical WIP migration failed:', err.message);
+      }
+    }
   }
   app.listen(PORT, HOST, () => {
     // eslint-disable-next-line no-console
