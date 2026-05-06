@@ -20,6 +20,7 @@
   </div>
   <div class="nav-meta">
     <span id="data-date-label">—</span>
+    <a class="nav-link" id="nav-historical-wip-link" onclick="switchTab('historical-wip')">Historical WIP</a>
     <button class="nav-btn" onclick="openUploadModal()">Upload data</button>
   </div>
 </nav>
@@ -335,6 +336,12 @@
 <!-- ─── ANALYSIS TAB ──────────────────────────────────────────────────────── -->
 <div id="view-analysis" class="view-panel">
   <!-- rendered by renderAnalysisTab() -->
+</div>
+
+
+<!-- ─── HISTORICAL WIP TAB ──────────────────────────────────────────────── -->
+<div id="view-historical-wip" class="view-panel">
+  <!-- rendered by renderHistoricalWipTab() -->
 </div>
 
 <script src="js/constants.js"></script>
