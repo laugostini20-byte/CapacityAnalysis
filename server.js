@@ -181,6 +181,94 @@ function loadHistoricalWipFromWorkbook(xlsxPath) {
   }
 }
 
+// One-time migration: imports rows from the historical WIP xlsx into the
+// historical_wip table. Idempotent — should only be called when the table
+// is empty. Returns count of rows inserted.
+async function importHistoricalWipFromXlsx(pool, xlsxPath) {
+  const wipData = loadHistoricalWipFromWorkbook(xlsxPath);
+  if (!wipData.loaded) {
+    console.warn('Historical WIP migration skipped:', wipData.message);
+    return 0;
+  }
+
+  const sourceFilename = wipData.source;
+  let rowCount = 0;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const [date, perLab] of Object.entries(wipData.dailyByDate)) {
+      for (const [labKey, value] of Object.entries(perLab)) {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) continue;
+        // labKey here is already normalized (from loadHistoricalWipFromWorkbook).
+        // We need to recover the lab_raw from the labs list — best-effort, fall back to labKey.
+        const labRaw = wipData.labs.find(l => normalizeLabKey(l) === labKey) || labKey;
+        await client.query(
+          `INSERT INTO historical_wip (lab_raw, lab_key, entry_date, std_hrs, source_filename)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (lab_key, entry_date) DO NOTHING`,
+          [labRaw, labKey, date, value, sourceFilename]
+        );
+        rowCount++;
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return rowCount;
+}
+
+// Loads historical WIP from the database in the same shape that
+// loadHistoricalWipFromWorkbook used to return. Used by GET /api/historical-wip
+// so existing front-end consumers (loadData, modal chart) keep working.
+async function loadHistoricalWipFromDb(pool) {
+  const fallback = {
+    source: 'historical_wip (db)',
+    category: HISTORICAL_WIP_CATEGORY,
+    dailyByDate: {},
+    range: {start: null, end: null},
+    labs: [],
+    loaded: false,
+    message: 'Database not configured'
+  };
+  if (!pool) return fallback;
+
+  try {
+    const result = await pool.query(
+      `SELECT lab_raw, lab_key, entry_date::text AS entry_date, std_hrs
+       FROM historical_wip
+       ORDER BY entry_date, lab_key`
+    );
+    const dailyByDate = {};
+    const labSet = new Set();
+    for (const row of result.rows) {
+      const date = row.entry_date;
+      if (!dailyByDate[date]) dailyByDate[date] = {};
+      dailyByDate[date][row.lab_key] = Number(row.std_hrs);
+      labSet.add(row.lab_raw);
+    }
+    const dates = Object.keys(dailyByDate).sort();
+    return {
+      source: 'historical_wip (db)',
+      category: HISTORICAL_WIP_CATEGORY,
+      dailyByDate,
+      range: {start: dates[0] || null, end: dates[dates.length - 1] || null},
+      labs: [...labSet].sort((a, b) => a.localeCompare(b)),
+      loaded: true,
+      message: null
+    };
+  } catch (err) {
+    return {
+      ...fallback,
+      loaded: false,
+      message: `Failed to query historical_wip: ${err.message}`
+    };
+  }
+}
+
 const HISTORICAL_WIP = loadHistoricalWipFromWorkbook(HISTORICAL_WIP_XLSX_PATH);
 
 function normalizeHeader(v) {
@@ -499,6 +587,112 @@ function parseHeadcountOverrides(rows) {
   return {overrides: [...deduped.values()], issues, skipped};
 }
 
+// Parses an xlsx loaded as raw rows into historical WIP overrides.
+// Mirrors the format used by loadHistoricalWipFromWorkbook (header in row 0,
+// lab in column 1, category in column 2, daily values in columns 3+).
+// Returns {overrides, issues, skipped}.
+function parseHistoricalWipRows(workbookBuffer) {
+  const overrides = [];
+  const issues = [];
+  const skipped = [];
+
+  let wb;
+  try {
+    wb = XLSX.read(workbookBuffer, {type: 'buffer'});
+  } catch (err) {
+    issues.push(`Could not parse workbook: ${err.message}`);
+    return {overrides, issues, skipped};
+  }
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) {
+    issues.push('Workbook has no sheets');
+    return {overrides, issues, skipped};
+  }
+  const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: null});
+  if (!rows.length) {
+    issues.push('Workbook is empty');
+    return {overrides, issues, skipped};
+  }
+
+  const header = rows[0] || [];
+  const dateCols = [];
+  for (let c = 3; c < header.length; c++) {
+    const iso = excelDateToISO(header[c]);
+    if (iso) dateCols.push({idx: c, date: iso});
+  }
+  if (!dateCols.length) {
+    issues.push('No date columns found in header (expected dates in columns 3+)');
+    return {overrides, issues, skipped};
+  }
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const category = String(row[2] || '').trim();
+    if (category !== HISTORICAL_WIP_CATEGORY) continue;
+
+    const labRaw = String(row[1] || '').trim();
+    if (!labRaw) {
+      skipped.push({rowNumber: r + 1, reason: 'Empty lab name'});
+      continue;
+    }
+    const labKey = normalizeLabKey(labRaw);
+    const canonicalKey = LAB_MAPPING.aliasToCanonicalKey[labKey] || labKey;
+    if (!LAB_MAPPING.canonicalLabByKey[canonicalKey]) {
+      skipped.push({rowNumber: r + 1, labRaw, reason: `Unknown lab: "${labRaw}"`});
+      continue;
+    }
+
+    for (const dc of dateCols) {
+      const v = row[dc.idx];
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
+      overrides.push({
+        labRaw,
+        labKey: canonicalKey,
+        entryDate: dc.date,
+        stdHrs: Number(v)
+      });
+    }
+  }
+
+  return {overrides, issues, skipped};
+}
+
+// Merges parsed historical WIP overrides into the historical_wip table.
+// Insert new (lab_key, entry_date) rows; update existing rows when std_hrs differs;
+// leave unchanged rows alone. Returns {inserted, updated, unchanged}.
+async function syncHistoricalWipOverrides(client, overrides, sourceFilename) {
+  let inserted = 0;
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const o of overrides) {
+    const existing = await client.query(
+      `SELECT std_hrs FROM historical_wip WHERE lab_key = $1 AND entry_date = $2`,
+      [o.labKey, o.entryDate]
+    );
+    if (!existing.rows.length) {
+      await client.query(
+        `INSERT INTO historical_wip (lab_raw, lab_key, entry_date, std_hrs, source_filename)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [o.labRaw, o.labKey, o.entryDate, o.stdHrs, sourceFilename]
+      );
+      inserted++;
+    } else if (Number(existing.rows[0].std_hrs) !== o.stdHrs) {
+      await client.query(
+        `UPDATE historical_wip
+         SET std_hrs = $1, source_filename = $2, updated_at = NOW()
+         WHERE lab_key = $3 AND entry_date = $4`,
+        [o.stdHrs, sourceFilename, o.labKey, o.entryDate]
+      );
+      updated++;
+    } else {
+      unchanged++;
+    }
+  }
+
+  return {inserted, updated, unchanged};
+}
+
 async function ensureSchema() {
   if (!pool) return;
   await pool.query(SCHEMA_SQL);
@@ -801,6 +995,9 @@ const ctx = {
   LAB_MAPPING,
   LAB_MAPPING_CSV_PATH,
   HISTORICAL_WIP,
+  loadHistoricalWipFromDb,
+  parseHistoricalWipRows,
+  syncHistoricalWipOverrides,
   mapToCanonicalLabKey,
   parseRowsFromBuffer,
   parseScheduleEvents,
@@ -831,6 +1028,19 @@ async function start() {
   if (pool) {
     await ensureSchema();
     await pool.query('SELECT 1');
+
+    // One-time migration: if historical_wip is empty, import the xlsx.
+    const wipCount = await pool.query('SELECT COUNT(*) AS c FROM historical_wip');
+    if (Number(wipCount.rows[0].c) === 0) {
+      try {
+        const inserted = await importHistoricalWipFromXlsx(pool, HISTORICAL_WIP_XLSX_PATH);
+        // eslint-disable-next-line no-console
+        console.log(`Historical WIP migration: inserted ${inserted} rows from xlsx.`);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Historical WIP migration failed:', err.message);
+      }
+    }
   }
   app.listen(PORT, HOST, () => {
     // eslint-disable-next-line no-console

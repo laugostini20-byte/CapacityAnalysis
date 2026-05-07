@@ -74,3 +74,20 @@ CREATE TABLE IF NOT EXISTS lab_settings (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS historical_wip (
+  id BIGSERIAL PRIMARY KEY,
+  lab_raw TEXT NOT NULL,
+  lab_key TEXT NOT NULL,
+  entry_date DATE NOT NULL,
+  std_hrs NUMERIC(12,2) NOT NULL CHECK (std_hrs >= 0),
+  source_filename TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT historical_wip_key UNIQUE (lab_key, entry_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_historical_wip_entry_date
+  ON historical_wip (entry_date);
+CREATE INDEX IF NOT EXISTS idx_historical_wip_lab_key
+  ON historical_wip (lab_key);

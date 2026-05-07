@@ -20,6 +20,7 @@
   </div>
   <div class="nav-meta">
     <span id="data-date-label">—</span>
+    <a class="nav-link" id="nav-historical-wip-link" onclick="switchTab('historical-wip')">Historical WIP</a>
     <button class="nav-btn" onclick="openUploadModal()">Upload data</button>
   </div>
 </nav>
@@ -286,6 +287,7 @@
         <button class="upload-tab active" id="utab-std-hours" onclick="switchUploadTab('std-hours')">Std Hours</button>
         <button class="upload-tab" id="utab-schedule" onclick="switchUploadTab('schedule')">Onsite Schedule</button>
         <button class="upload-tab" id="utab-headcount" onclick="switchUploadTab('headcount')">Headcount</button>
+        <button class="upload-tab" id="utab-historical-wip" onclick="switchUploadTab('historical-wip')">Historical WIP</button>
       </div>
 
       <div id="upload-pane-std-hours">
@@ -328,6 +330,17 @@
           <div id="upload-result-headcount" class="upload-result"></div>
         </form>
       </div>
+
+      <div id="upload-pane-historical-wip" hidden>
+        <form class="upload-form" onsubmit="submitUpload(event,'historical-wip')">
+          <div class="upload-field">
+            <label>File (CSV or Excel)</label>
+            <input type="file" name="file" accept=".csv,.xlsx,.xls" required>
+          </div>
+          <button type="submit" class="upload-submit">Upload historical WIP</button>
+          <div id="upload-result-historical-wip" class="upload-result"></div>
+        </form>
+      </div>
     </div>
   </div>
 </div>
@@ -335,6 +348,12 @@
 <!-- ─── ANALYSIS TAB ──────────────────────────────────────────────────────── -->
 <div id="view-analysis" class="view-panel">
   <!-- rendered by renderAnalysisTab() -->
+</div>
+
+
+<!-- ─── HISTORICAL WIP TAB ──────────────────────────────────────────────── -->
+<div id="view-historical-wip" class="view-panel">
+  <!-- rendered by renderHistoricalWipTab() -->
 </div>
 
 <script src="js/constants.js"></script>
@@ -349,6 +368,7 @@
 <script src="js/scenario-planner.js"></script>
 <script src="js/upload.js"></script>
 <script src="js/analysis.js"></script>
+<script src="js/historical-wip.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

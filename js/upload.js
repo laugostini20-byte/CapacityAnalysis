@@ -17,7 +17,7 @@ function onUploadBackdropClick(e) {
 }
 
 function switchUploadTab(tabName) {
-  ['std-hours', 'schedule', 'headcount'].forEach(t => {
+  ['std-hours', 'schedule', 'headcount', 'historical-wip'].forEach(t => {
     document.getElementById(`utab-${t}`)?.classList.toggle('active', t === tabName);
     const pane = document.getElementById(`upload-pane-${t}`);
     if (pane) pane.hidden = t !== tabName;
@@ -140,7 +140,9 @@ async function submitUpload(e, type) {
     ? '/api/std-hours/sync'
     : type === 'headcount'
       ? '/api/headcount/sync'
-      : '/api/schedules/sync';
+      : type === 'historical-wip'
+        ? '/api/historical-wip/sync'
+        : '/api/schedules/sync';
   try {
     const res = await fetch(url, { method: 'POST', body: fd });
     const data = await res.json();
@@ -161,6 +163,7 @@ async function submitUpload(e, type) {
     buildLabList();
     renderStatusBoard();
     if (st.tab === 'scenario-planner') renderScenarioPlanner();
+    if (st.tab === 'historical-wip') renderHistoricalWipTab();
   } catch (err) {
     resultEl.className = 'upload-result err';
     resultEl.textContent = 'Error: ' + err.message;
