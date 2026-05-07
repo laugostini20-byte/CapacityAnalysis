@@ -167,10 +167,14 @@ async function submitUpload(e, type) {
     buildLabList();
     renderStatusBoard();
     if (st.tab === 'scenario-planner') renderScenarioPlanner();
-    if (type === 'historical-wip') {
-      // Reset the date range so the next render of the Historical WIP tab
-      // re-defaults to "last 60 days through latest date" — otherwise the
-      // user's stale range would hide whatever new data they just uploaded.
+    // Reset the Historical WIP tab's date range whenever new historical-WIP
+    // data was just written — either by a direct historical-wip upload, or
+    // by a std-hours upload that cascaded into historical_wip. Without this,
+    // the tab's stale "last 60 days" range would silently filter out the
+    // newly-uploaded date.
+    const cascade = data.historicalCascade;
+    const cascadeWroteRows = cascade && (cascade.inserted > 0 || cascade.updated > 0);
+    if (type === 'historical-wip' || (type === 'std-hours' && cascadeWroteRows)) {
       historicalWipState.rangeStart = null;
       historicalWipState.rangeEnd = null;
       if (st.tab === 'historical-wip') renderHistoricalWipTab();
