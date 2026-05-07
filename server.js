@@ -245,16 +245,18 @@ async function loadHistoricalWipFromDb(pool) {
     const dailyByDate = {};
     const labSet = new Set();
     for (const row of result.rows) {
+      // Only surface labs that exist in the canonical mapping. Std-hours
+      // uploads accept "unmapped" labs with a warning (so the user gets
+      // their data persisted without engineering intervention), but those
+      // labs shouldn't appear in the Historical WIP review or in the
+      // PY As-Of consumers downstream — they're not labs the tool tracks.
+      const canonicalLabName = LAB_MAPPING.canonicalLabByKey[row.lab_key];
+      if (!canonicalLabName) continue;
+
       const date = row.entry_date;
       if (!dailyByDate[date]) dailyByDate[date] = {};
       dailyByDate[date][row.lab_key] = Number(row.std_hrs);
-      // Always display the canonical lab name (from the mapping CSV) instead of
-      // whatever was uploaded. Different uploads may have different "raw" names
-      // for the same lab (e.g. "Houston" vs "Houston - 5") — using the canonical
-      // name dedupes the labs list and ensures the front-end table can look up
-      // values via labKey(displayedName) without a mismatch.
-      const displayName = LAB_MAPPING.canonicalLabByKey[row.lab_key] || row.lab_raw;
-      labSet.add(displayName);
+      labSet.add(canonicalLabName);
     }
     const dates = Object.keys(dailyByDate).sort();
     return {
@@ -752,9 +754,11 @@ async function cascadeStdHoursToHistoricalWip(client, stdHoursOverrides, effecti
     const labKey = o.labKey;
     const stdHrs = Number(o.stdHours);
     if (!labKey || !Number.isFinite(stdHrs) || stdHrs < 0) continue;
-    // Always store the canonical lab name so the labs list in the historical
-    // WIP review tab stays deduplicated across upload sources.
-    const canonicalLabRaw = LAB_MAPPING.canonicalLabByKey[labKey] || o.labRaw;
+    // Only cascade labs that are actually in the canonical mapping. The
+    // std-hours parser is lenient and will accept unmapped labs with a
+    // warning, but Historical WIP should only contain labs the tool tracks.
+    const canonicalLabRaw = LAB_MAPPING.canonicalLabByKey[labKey];
+    if (!canonicalLabRaw) continue;
 
     const existing = await client.query(
       `SELECT std_hrs FROM historical_wip WHERE lab_key = $1 AND entry_date = $2`,
