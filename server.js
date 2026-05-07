@@ -588,8 +588,22 @@ function parseHeadcountOverrides(rows) {
 }
 
 // Parses an xlsx loaded as raw rows into historical WIP overrides.
-// Mirrors the format used by loadHistoricalWipFromWorkbook (header in row 0,
-// lab in column 1, category in column 2, daily values in columns 3+).
+// Auto-detects two formats:
+//
+//   "Simple" format (employee-native, file headed "Lab Name" + date columns):
+//     col 0   = lab name
+//     cols 1+ = daily WIP values, header row holds the dates
+//
+//   "Multi-category" format (legacy, matches loadHistoricalWipFromWorkbook):
+//     col 0   = anything (often blank or row index)
+//     col 1   = lab name
+//     col 2   = category — only rows where category === "Workable WIP Std. Hrs."
+//               are imported; all other categories are silently ignored
+//     cols 3+ = daily WIP values, header row holds the dates
+//
+// Detection rule: if header[1] decodes to a valid date, it's the simple format;
+// otherwise it's the multi-category format.
+//
 // Returns {overrides, issues, skipped}.
 function parseHistoricalWipRows(workbookBuffer) {
   const overrides = [];
@@ -615,22 +629,35 @@ function parseHistoricalWipRows(workbookBuffer) {
   }
 
   const header = rows[0] || [];
+  const isSimpleFormat = excelDateToISO(header[1]) !== null;
+  const labCol = isSimpleFormat ? 0 : 1;
+  const dateColStart = isSimpleFormat ? 1 : 3;
+
   const dateCols = [];
-  for (let c = 3; c < header.length; c++) {
+  for (let c = dateColStart; c < header.length; c++) {
     const iso = excelDateToISO(header[c]);
     if (iso) dateCols.push({idx: c, date: iso});
   }
   if (!dateCols.length) {
-    issues.push('No date columns found in header (expected dates in columns 3+)');
+    issues.push(
+      isSimpleFormat
+        ? 'No date columns found in header (expected dates in columns 1+)'
+        : 'No date columns found in header (expected dates in columns 3+)'
+    );
     return {overrides, issues, skipped};
   }
 
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r] || [];
-    const category = String(row[2] || '').trim();
-    if (category !== HISTORICAL_WIP_CATEGORY) continue;
 
-    const labRaw = String(row[1] || '').trim();
+    // Multi-category format filters by category column; simple format treats
+    // every row as a WIP row.
+    if (!isSimpleFormat) {
+      const category = String(row[2] || '').trim();
+      if (category !== HISTORICAL_WIP_CATEGORY) continue;
+    }
+
+    const labRaw = String(row[labCol] || '').trim();
     if (!labRaw) {
       skipped.push({rowNumber: r + 1, reason: 'Empty lab name'});
       continue;
