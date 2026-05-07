@@ -733,6 +733,56 @@ async function syncHistoricalWipOverrides(client, overrides, sourceFilename) {
   return {inserted, updated, unchanged};
 }
 
+// Cascades a successful std-hours upload into the historical_wip table.
+// For each std-hours override (lab + value), writes a corresponding row to
+// historical_wip keyed on the std-hours upload's effectiveFrom date. Same
+// idempotent merge logic as syncHistoricalWipOverrides.
+//
+// This means a daily/weekly std-hours upload also keeps the Historical WIP
+// review page current, so the user doesn't have to maintain two parallel
+// upload workflows.
+//
+// Returns {inserted, updated, unchanged, entryDate}.
+async function cascadeStdHoursToHistoricalWip(client, stdHoursOverrides, effectiveFrom, sourceFilename) {
+  let inserted = 0;
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const o of stdHoursOverrides) {
+    const labKey = o.labKey;
+    const stdHrs = Number(o.stdHours);
+    if (!labKey || !Number.isFinite(stdHrs) || stdHrs < 0) continue;
+    // Always store the canonical lab name so the labs list in the historical
+    // WIP review tab stays deduplicated across upload sources.
+    const canonicalLabRaw = LAB_MAPPING.canonicalLabByKey[labKey] || o.labRaw;
+
+    const existing = await client.query(
+      `SELECT std_hrs FROM historical_wip WHERE lab_key = $1 AND entry_date = $2`,
+      [labKey, effectiveFrom]
+    );
+    if (!existing.rows.length) {
+      await client.query(
+        `INSERT INTO historical_wip (lab_raw, lab_key, entry_date, std_hrs, source_filename)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [canonicalLabRaw, labKey, effectiveFrom, stdHrs, sourceFilename]
+      );
+      inserted++;
+    } else if (Number(existing.rows[0].std_hrs) !== stdHrs) {
+      await client.query(
+        `UPDATE historical_wip
+         SET std_hrs = $1, source_filename = $2, lab_raw = $3, updated_at = NOW()
+         WHERE lab_key = $4 AND entry_date = $5`,
+        [stdHrs, sourceFilename, canonicalLabRaw, labKey, effectiveFrom]
+      );
+      updated++;
+    } else {
+      unchanged++;
+    }
+  }
+
+  return {inserted, updated, unchanged, entryDate: effectiveFrom};
+}
+
 async function ensureSchema() {
   if (!pool) return;
   await pool.query(SCHEMA_SQL);
@@ -1038,6 +1088,7 @@ const ctx = {
   loadHistoricalWipFromDb,
   parseHistoricalWipRows,
   syncHistoricalWipOverrides,
+  cascadeStdHoursToHistoricalWip,
   mapToCanonicalLabKey,
   parseRowsFromBuffer,
   parseScheduleEvents,

@@ -77,6 +77,10 @@ function renderUploadReport(type, data) {
   if (type === 'std-hours') {
     const range = data.effectiveTo ? `${data.effectiveFrom} to ${data.effectiveTo}` : `${data.effectiveFrom} onward`;
     lines.push(`Effective range: ${range}`);
+    if (data.historicalCascade) {
+      const c = data.historicalCascade;
+      lines.push(`Historical WIP (entry date ${c.entryDate}): ${c.inserted} inserted, ${c.updated} updated, ${c.unchanged} unchanged`);
+    }
   } else if (type === 'headcount') {
     lines.push(`Effective month: ${data.effectiveMonth ?? '—'}`);
   }

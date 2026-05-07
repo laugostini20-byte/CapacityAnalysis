@@ -14,6 +14,7 @@ function createStdHoursRouter(ctx) {
     parseRowsFromBuffer,
     parseStdHoursOverrides,
     syncStdHoursOverrides,
+    cascadeStdHoursToHistoricalWip,
     parseISODateInput,
     mapToCanonicalLabKey
   } = ctx;
@@ -96,9 +97,18 @@ function createStdHoursRouter(ctx) {
         effectiveFrom,
         effectiveTo
       );
+      // Cascade to historical_wip so the Historical WIP review tab stays
+      // current without a separate upload step.
+      const historicalCascade = await cascadeStdHoursToHistoricalWip(
+        client,
+        overrides,
+        effectiveFrom,
+        req.file.originalname || 'upload'
+      );
       await client.query('COMMIT');
       res.json({
         summary,
+        historicalCascade,
         parsedRows: rows.length,
         validRows: overrides.length,
         effectiveFrom,
