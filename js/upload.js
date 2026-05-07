@@ -77,6 +77,10 @@ function renderUploadReport(type, data) {
   if (type === 'std-hours') {
     const range = data.effectiveTo ? `${data.effectiveFrom} to ${data.effectiveTo}` : `${data.effectiveFrom} onward`;
     lines.push(`Effective range: ${range}`);
+    if (data.historicalCascade) {
+      const c = data.historicalCascade;
+      lines.push(`Historical WIP (entry date ${c.entryDate}): ${c.inserted} inserted, ${c.updated} updated, ${c.unchanged} unchanged`);
+    }
   } else if (type === 'headcount') {
     lines.push(`Effective month: ${data.effectiveMonth ?? '—'}`);
   }
@@ -163,7 +167,18 @@ async function submitUpload(e, type) {
     buildLabList();
     renderStatusBoard();
     if (st.tab === 'scenario-planner') renderScenarioPlanner();
-    if (st.tab === 'historical-wip') renderHistoricalWipTab();
+    // Reset the Historical WIP tab's date range whenever new historical-WIP
+    // data was just written — either by a direct historical-wip upload, or
+    // by a std-hours upload that cascaded into historical_wip. Without this,
+    // the tab's stale "last 60 days" range would silently filter out the
+    // newly-uploaded date.
+    const cascade = data.historicalCascade;
+    const cascadeWroteRows = cascade && (cascade.inserted > 0 || cascade.updated > 0);
+    if (type === 'historical-wip' || (type === 'std-hours' && cascadeWroteRows)) {
+      historicalWipState.rangeStart = null;
+      historicalWipState.rangeEnd = null;
+      if (st.tab === 'historical-wip') renderHistoricalWipTab();
+    }
   } catch (err) {
     resultEl.className = 'upload-result err';
     resultEl.textContent = 'Error: ' + err.message;
