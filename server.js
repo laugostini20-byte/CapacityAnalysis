@@ -506,6 +506,7 @@ function parseStdHoursOverrides(rows) {
       'Current Std Hours',
       'Std Hours',
       'Standard Hours',
+      'Standard Hrs',
       'StdHrs',
       'Weekly Demand',
       'Demand Hrs'
