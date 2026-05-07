@@ -163,7 +163,14 @@ async function submitUpload(e, type) {
     buildLabList();
     renderStatusBoard();
     if (st.tab === 'scenario-planner') renderScenarioPlanner();
-    if (st.tab === 'historical-wip') renderHistoricalWipTab();
+    if (type === 'historical-wip') {
+      // Reset the date range so the next render of the Historical WIP tab
+      // re-defaults to "last 60 days through latest date" — otherwise the
+      // user's stale range would hide whatever new data they just uploaded.
+      historicalWipState.rangeStart = null;
+      historicalWipState.rangeEnd = null;
+      if (st.tab === 'historical-wip') renderHistoricalWipTab();
+    }
   } catch (err) {
     resultEl.className = 'upload-result err';
     resultEl.textContent = 'Error: ' + err.message;

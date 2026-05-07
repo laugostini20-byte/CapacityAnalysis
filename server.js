@@ -248,7 +248,13 @@ async function loadHistoricalWipFromDb(pool) {
       const date = row.entry_date;
       if (!dailyByDate[date]) dailyByDate[date] = {};
       dailyByDate[date][row.lab_key] = Number(row.std_hrs);
-      labSet.add(row.lab_raw);
+      // Always display the canonical lab name (from the mapping CSV) instead of
+      // whatever was uploaded. Different uploads may have different "raw" names
+      // for the same lab (e.g. "Houston" vs "Houston - 5") — using the canonical
+      // name dedupes the labs list and ensures the front-end table can look up
+      // values via labKey(displayedName) without a mismatch.
+      const displayName = LAB_MAPPING.canonicalLabByKey[row.lab_key] || row.lab_raw;
+      labSet.add(displayName);
     }
     const dates = Object.keys(dailyByDate).sort();
     return {
@@ -669,11 +675,17 @@ function parseHistoricalWipRows(workbookBuffer) {
       continue;
     }
 
+    // Store the canonical lab name (from the mapping CSV), not whatever the
+    // uploaded file used. This keeps the labs list deduplicated even when
+    // different upload sources use different naming conventions for the same
+    // lab (e.g. "Houston" vs "Houston - 5").
+    const canonicalLabRaw = LAB_MAPPING.canonicalLabByKey[canonicalKey];
+
     for (const dc of dateCols) {
       const v = row[dc.idx];
       if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
       overrides.push({
-        labRaw,
+        labRaw: canonicalLabRaw,
         labKey: canonicalKey,
         entryDate: dc.date,
         stdHrs: Number(v)
